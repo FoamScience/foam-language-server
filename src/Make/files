@@ -1,0 +1,3 @@
+foamParser/foamParser.C
+
+LIB = $(FOAM_USER_LIBBIN)/libfoamParser
