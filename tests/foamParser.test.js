@@ -1,4 +1,4 @@
-const parser = require('./build/Release/foamParser.node');
+const parser = require('../build/Release/foamParser.node');
 
 const fp = new parser.foamParser();
 
@@ -27,5 +27,11 @@ test('Error when getting keywords from an invalid dictionary',
         expect(() => {
             fp.getEntryKeywords("keyword", "keyword {type 1; value uniform 0}")
         }).toThrow();
+    }
+);
+
+test('Get line number from a dictionary of expanded macro keyword',
+    () => {
+        expect(fp.getKeywordLineNumber("keyword", "somethingElse 0;\nll 1;\nkeyword $ll;\n")).toBe(1);
     }
 );

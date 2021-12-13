@@ -2,6 +2,7 @@
 #include "error.H"
 #include "IOstreams.H"
 #include "addToRunTimeSelectionTable.H"
+#include <functional>
 
 // * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
 
@@ -105,6 +106,8 @@ std::string Foam::foamParser::getEntryValue
 )
 {
     // Prepare scoped name and string stream
+    entry::disableFunctionEntries = true;
+    word entryValue = "";
     word scopedName = scope(entryName);
     IStringStream is(dictContent);
 
@@ -121,10 +124,13 @@ std::string Foam::foamParser::getEntryValue
     );
 
     // Return empty if something is wrong with scoping
-    if (!entPtr) return "";
+    if (!entPtr) return entryValue.c_str();
+    entryValue = entryToWord(*entPtr);
+
+    dict_.clear();
 
     // Return whetever we found as a word
-    return entryToWord(*entPtr).c_str();
+    return entryValue.c_str();
 }
 
 Foam::wordList Foam::foamParser::getEntryKeywords
@@ -134,6 +140,7 @@ Foam::wordList Foam::foamParser::getEntryKeywords
 )
 {
     // Prepare scoped name and string stream
+    entry::disableFunctionEntries = true;
     word scopedName = scope(entryName);
     IStringStream is(dictContent);
     wordList keywords;
@@ -159,8 +166,106 @@ Foam::wordList Foam::foamParser::getEntryKeywords
         keywords.append(iter().keyword());
     }
 
+    dict_.clear();
+
     // Return populated keywords
     return keywords;
+}
+
+Foam::List<Foam::Tuple2<Foam::word, Foam::label>> Foam::foamParser::getAllKeywords
+(
+    const std::string& dictContent
+)
+{
+    // Defaulting to not expanding macros ... etc
+    // TODO: Make this an option of the LSP server
+    // The entry `Entry $Var;` will point to Var's location (as a symbol) if this
+    // is false
+    entry::disableFunctionEntries = true;
+
+    // Prepare return list and read in content
+    IStringStream is(dictContent);
+    dict_.read(is);
+    List<Tuple2<word, label>> keywords;
+
+    std::function<List<Tuple2<word, label>>(const dictionary&, const word)> getKeys =
+        [&](const dictionary& dict, const word keyword) -> List<Tuple2<word, label>>
+    {
+        word newKey = keyword;
+        List<Tuple2<word, label>> AllKeywords;
+        if (dict.isDict(keyword))
+        {
+            //AllKeywords.append(Tuple2<word, label>(word(keyword), dict.subDict(keyword).startLineNumber()-1));
+            forAllConstIter(dictionary, dict.subDict(keyword), iter)
+            {
+                word key = iter().keyword();
+                label location = dict.subDict(keyword).isDict(key) ? iter().startLineNumber()-1 : iter().startLineNumber();
+                AllKeywords.append(Tuple2<word, label>(word(keyword+"."+key), location));
+                if (dict.subDict(keyword).isDict(key))
+                {
+                    List<Tuple2<word, label>> subKeys = getKeys(dict.subDict(keyword), key);
+                    forAll(subKeys, ki)
+                    {
+                        AllKeywords.append(Tuple2<word, label>(keyword+"."+subKeys[ki].first(), subKeys[ki].second()));
+                    }
+                }
+            }
+        } else {
+            AllKeywords.append(Tuple2<word, label>(keyword, dict.lookupEntry(keyword, false, false).startLineNumber()));
+        }
+        return AllKeywords;
+    };
+
+
+    List<Tuple2<word, label>> AllKeywords;
+    forAllConstIter(dictionary, dict_, iter)
+    {
+        word key = iter().keyword();
+        if (dict_.isDict(key))
+        {
+            AllKeywords.append(Tuple2<word, label>(word(key), dict_.subDict(key).startLineNumber()-1));
+        }
+        AllKeywords.append(getKeys(dict_, key));
+    }
+
+    dict_.clear();
+
+    // Return populated keywords
+    return AllKeywords;
+}
+
+int Foam::foamParser::getKeywordLineNumber
+(
+    const std::string& entryName,
+    const std::string& dictContent
+)
+{
+    entry::disableFunctionEntries = false;
+    int lineNumber = -1;
+    // Prepare scoped name and string stream
+    word scopedName = scope(entryName);
+    IStringStream is(dictContent);
+
+    // Read dict content
+    dict_.read(is);
+
+    // Because dictionary::operator[] on some forks (eg. FE4)
+    // is not scope aware sadly, we have to look it up manually
+    const entry* entPtr = dict_.lookupScopedEntryPtr
+    (
+        scopedName,
+        false,
+        true            // Support wildcards
+    );
+
+    // Return empty if something is wrong with scoping
+    if (!entPtr) return -1;
+    lineNumber = entPtr->startLineNumber();
+
+    dict_.clear();
+
+    // Return whetever we found
+    return lineNumber;
 }
 
 // ************************************************************************* //

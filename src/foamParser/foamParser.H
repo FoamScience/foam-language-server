@@ -40,6 +40,7 @@ Author
 #include "word.H"
 #include "Pair.H"
 #include "dictionary.H"
+#include "Tuple2.H"
 #include "messageStream.H"
 #include <sstream>
 
@@ -97,6 +98,20 @@ public:
 
         //- Get entry keywords
         wordList getEntryKeywords
+        (
+            const std::string& entryName,
+            const std::string& dictContent
+        );
+
+        //- Get All keywords in a dictionary, with their positions
+        List<Tuple2<word, label>> getAllKeywords
+        (
+            const std::string& dictContent
+        );
+
+        //- Get line number of a keyword after resolving macros
+        //  Use to get definitions
+        int getKeywordLineNumber
         (
             const std::string& entryName,
             const std::string& dictContent

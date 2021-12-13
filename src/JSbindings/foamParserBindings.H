@@ -41,6 +41,12 @@ class foamParser
         //- Wrapper for Foam::foamParser::getEntryKeywords
         Napi::Value GetEntryKeywords(const Napi::CallbackInfo& info);
 
+        //- Wrapper for Foam::foamParser::getAllKeywords
+        Napi::Value GetAllKeywords(const Napi::CallbackInfo& info);
+
+        //- Wrapper for Foam::foamParser::getKeywordLineNumber
+        Napi::Value GetKeywordLineNumber(const Napi::CallbackInfo& info);
+
         //- Pointer to parser object
         std::shared_ptr<Foam::foamParser> parser_;
 };

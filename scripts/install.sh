@@ -31,12 +31,12 @@ fi
 case ${WM_PROJECT} in
 
     "foam")
-        echo -n "Supported"
         buildFoamParserLibrary
         buildAddon
+        tsc -b
         ;;
     *)
-        echo -n "OpenFOAM fork not supported"
+        echo -n "OpenFOAM fork not yet supported"
         exit 1
         ;;
 esac
