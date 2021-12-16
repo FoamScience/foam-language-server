@@ -1,14 +1,18 @@
 # FOAM Language Server
 
-> This is young project; still at early phases of development,
+> This project is *young*; still at early phases of development,
 > so expect things to change considerably
+
+> DISCLAIMER:
+> This offering is not approved or endorsed by OpenCFD Limited, producer and distributor
+> of the OpenFOAM software and owner of the OPENFOAM®  and OpenCFD®  trade marks.
 
 An implementation of the Language Server Protocol ([LSP](https://microsoft.github.io/language-server-protocol/))
 for OpenFOAM dictionaries.
 We're supporting the following features (`*` for partial or limited support):
 
 - **Auto-Completion** [Not fully implemented Yet]
-    - [x] Macro expansion `*`
+    - [x] Macro expansion `*` (always suggests absolute paths)
     - [x] Common keywords `*`
     - [x] Snippets (with documentation) `*`
     - [ ] Valid entries based on the "Banana Trick" `?`
@@ -24,9 +28,10 @@ We're supporting the following features (`*` for partial or limited support):
     - [x] Common keywords `*`
 - **Diagnostics** [Not fully implemented Yet,]
     - [x] Can handle most default `FATAL ERROR`s and `FATAL IO ERROR`s
-    - [x] Uses OpenFOAM parser (not fault tolerant), so you get one diagnostic at a time
-    - [ ] Allows for custom error detection
+    - [x] Needs to run the solver, so you'll get one error at a time
     - [ ] Workspace-wide
+    - [ ] Support for warnings
+    - [ ] Custom error regular expressions
 
 The following common LSP features will not be considered in the near future
 (and PRs to these areas are actually _discourages_):
@@ -34,11 +39,10 @@ The following common LSP features will not be considered in the near future
 - Syntax-based Folding and Highlighting
     - Because [tree-sitter-foam](https://github.com/FoamScience/tree-sitter-foam) 
       has these features already.
-    - All you have to do is `:TSInstall foam` (on (Neo)VIM, or equivalent) and detect
-      the file type.
+    - All you have to do is `:TSInstall foam` (on (Neo)VIM, or equivalent)
 - Formatting
-    - I don't why people use formatters, set up your editor to write inherently
-      formatted code, that's all!
+    - Please use external C++/Typescript formatters if you're obsessed with
+      nice-looking code.
 - Semantic Tokenisation
     - We have little to no semantics in OpenFOAM file format. Especially, the lack
       of modifier-like constructs discourages extensive semantics tokenisation.
@@ -46,41 +50,53 @@ The following common LSP features will not be considered in the near future
 
 ## Installation and configuration
 
+### Installation
+
+If you want the (somewhat) stable code (from Releases):
+```bash
+npm install foam-language-server
+```
+
+If you want the bleeding-edge features, with all the bleeding-edge bugs:
+```bash
+git clone --depth 1 --single-branch -b develop https://github.com/FoamScience/foam-language-server
+npm install
+npm test
+```
+
 ### Configuration
-
-#### File Type detection
-
-First, you must make sure your text editor assigns the file type `type` to
-OpenFOAM dictionaries.
 
 #### Root directory detection
 
 It's important that your text editor detects the case directory as the "root directory"
-as diagnostics will depend on it.
+because diagnostics will depend on it. Most editors will ask the LSP for the root directory,
+but for those which don't, you'll have to configure it manually.
 
 #### LSP configuration
 
-[Section not complete]
+[TODO: Section not complete]
 
-## JS bindings for the OpenFOAM parser library
+## FAQ
 
-> This feature is experimental
-
-The `src` directory implements a traditional parser library for OpenFOAM dictionaries
-(currently, compiles only with Foam-Extend-4) which is not fault tolerant. It
-is used only for **Diagnostics** and nothing else.
-
-The parser library has JS bindings to enable seamless and fast interaction with
-OpenFOAM dictionaries, but the [Tree-Sitter grammar](https://github.com/FoamScience/tree-sitter-foam)
-is preferred.
-
-## Not a (Neo)VIM user?
+### Not a (Neo)VIM user?
 
 > can I ask WHY?
 
 It is possible to run this LSP implementation with any text editor or IDE which supports
 LSP (most do), however Neo(VIM) has a clear priority and you may have to
 give up some features for things to work on other editors.
+
+### Can I run it on Windows?
+
+Sure, you can. It's basically a piece of C++/JavaScript technology which has nothing to
+do with OpenFOAM code base (other parsing than its file format, of course).
+
+Currently the only feature which has a slim chance of working on Windows
+is the "diagnostics" feature, because it needs to fire the case's solver to see if it errors
+out (and captures `stderr`).
+
+If you have solvers on your Windows PATH, and diagnostics are not showing up; please file a bug
+report.
 
 ## Contributing to this project
 

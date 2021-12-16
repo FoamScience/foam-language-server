@@ -8,6 +8,8 @@ import { DocumentUri, TextDocument } from 'vscode-languageserver-textdocument';
 import { Position, Range, Diagnostic, TextEdit, FormattingOptions } from 'vscode-languageserver-types';
 import { Validator } from './foamValidator';
 
+import * as TreeParser from 'tree-sitter'
+
 // The formatter is not used
 export interface FormatterSettings extends FormattingOptions {
     ignoreMultilineInstructions?: boolean;
@@ -40,8 +42,8 @@ export interface ValidatorSettings {
 
 // Validates the (Chunk of) dictionary-like content passed as a string
 // and returns the resulting array of diagnostics
-export function validate(content: string, settings?: ValidatorSettings): Diagnostic[] {
+export function validate(content: string, parser: TreeParser, settings?: ValidatorSettings): Diagnostic[] {
     const document = TextDocument.create("", "", 0, content);
-    const validator = new Validator(settings);
+    const validator = new Validator(parser, settings);
     return validator.validate(document);
 }

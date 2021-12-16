@@ -13,6 +13,7 @@
 'use strict';
 
 import { TextDocument, SymbolInformation, SymbolKind, Range, TextDocumentIdentifier } from 'vscode-languageserver-types';
+import { writeFile,readFileSync } from 'fs';
 import * as TreeParser from 'tree-sitter'
 
 export class FoamSymbols {
