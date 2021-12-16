@@ -139,7 +139,7 @@ export interface FoamLanguageService {
      */
     computeSemanticTokens(content: string): SemanticTokens;
 
-    validate(content: string, settings?: ValidatorSettings): Diagnostic[];
+    validate(content: string, parser: TreeParser,  settings?: ValidatorSettings): Diagnostic[];
 
     //format(content: string, settings: FormatterSettings): TextEdit[];
 
@@ -149,4 +149,5 @@ export interface FoamLanguageService {
 
     setLogger(logger: ILogger): void;
     setTreeParser(): void;
+    getTreeParser(): TreeParser;
 }

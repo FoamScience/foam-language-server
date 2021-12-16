@@ -47,6 +47,10 @@ export class LanguageService implements FoamLanguageService {
         this.parser = getParser();
     }
 
+    public getTreeParser() : TreeParser {
+        return this.parser;
+    }
+
 
     public setCapabilities(capabilities: Capabilities) {
         this.completionItemCapabilities = capabilities && capabilities.completion && capabilities.completion.completionItem;
@@ -135,8 +139,8 @@ export class LanguageService implements FoamLanguageService {
         return foamSemanticTokens.computeSemanticTokens();
     }
 
-    public validate(content: string, settings?: FoamUtils.ValidatorSettings): Diagnostic[] {
-        return FoamUtils.validate(content, settings);
+    public validate(content: string, parser: TreeParser, settings?: FoamUtils.ValidatorSettings): Diagnostic[] {
+        return FoamUtils.validate(content, parser, settings);
     }
 
     //public format(content: string, settings: FormatterSettings): TextEdit[] {

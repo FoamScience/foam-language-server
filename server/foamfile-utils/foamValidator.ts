@@ -13,20 +13,18 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { Diagnostic, DiagnosticSeverity, DiagnosticTag, Position, Range } from 'vscode-languageserver-types';
 import { ValidationCode, ValidationSeverity, ValidatorSettings } from './main';
 
+import * as TreeParser from 'tree-sitter'
+
 import { spawnSync, execSync } from 'child_process';
 import { writeFile,readFileSync } from 'fs';
 var path = require('path');
 
-// OpenFOAM-related env vars
+// Try to figure out OpenFOAM-related env vars
 const of_fork = process.env.WM_PROJECT
 const of_version = process.env.WM_PROJECT_VERSION
 const of_compile_option = process.env.WM_COMPILE_OPTION
 const usr_libs = process.env.FOAM_USER_LIBBIN
 const usr_bins = process.env.FOAM_USER_APPBIN
-
-// Parser object, this parser is not fault-tolerant
-const parser = require('bindings')('foamParser');
-const fp = new parser.foamParser();
 
 // A representation of an OpenFOAM error
 export class ParsedError {
@@ -40,6 +38,9 @@ export class ParsedError {
 export class Validator {
 
     private document: TextDocument;
+    // A local reference to the Tree-Sitter Parser
+    private treeParser : TreeParser;
+
 
     private settings: ValidatorSettings = {
         rootUri: null,
@@ -47,16 +48,17 @@ export class Validator {
         fatalIOError: ValidationSeverity.WARNING,
     }
 
-    constructor(settings?: ValidatorSettings) {
+    constructor(parser : TreeParser, settings?: ValidatorSettings) {
         if (settings) {
             this.settings = settings;
         }
+        this.treeParser = parser;
     }
 
     /*
-        Parses an OpenFOAM case dictionary
+        Parses an OpenFOAM error
         Takes:
-        - The content of the dictionary
+        - The content of stderr from OpenFOAM solvers
         Returns:
         - Error type
         - The error message
@@ -101,13 +103,6 @@ export class Validator {
             result.end = +positions[1];
             result.options = options;
             return result;
-            //return [
-            //    errType.toString(),         // Type
-            //    message.toString(),         // Message
-            //    positions[0].toString(),    // Starting line
-            //    positions[1].toString(),    // Ending line
-            //    options                     // No valid options
-            //];
         }
 
         // Parse fatal IO errors
@@ -154,10 +149,56 @@ export class Validator {
         };
     }
 
+    // Look for a keyword and return its value using TreeSitter
+    // You have to use this generator multiple times if you want to capture
+    // all occurrences of keyword
+    // TODO: Make this generator scope-aware
+    public* getKeywordValue(content: string, keyword: string) {
+        let document : TextDocument = TextDocument.create("", "foam", 0, content);
+        const tree = this.treeParser.parse(content);
+
+        let cursor = tree.walk();
+        let reached_root = false;
+        while (reached_root == false) 
+        {
+            let values = [];
+            let node = cursor.currentNode;
+            // If a node matches the keyword
+            if (node.type == 'key_value' && node.namedChild(0).text == keyword){
+                for (const { index, value } of node.children.map((value, index) => ({ index, value }))) {
+                    // Take everything between keyword and ";"
+                    if (index != 0 && index != node.children.length-1) {
+                        values.push(value.text);
+                    }
+                }
+                yield values.join(' ');
+                if (cursor.gotoNextSibling()) continue;
+            }
+
+            if (cursor.gotoFirstChild()) continue;
+            if (cursor.gotoNextSibling()) continue;
+            let retracing = true;
+            while (retracing)
+            {
+                if (cursor.gotoParent() == false){
+                    retracing = false;
+                    reached_root = true;
+                }
+
+                if (cursor.gotoNextSibling()) {
+                    retracing = false;
+                }
+            }
+        }
+    }
     // Run the solver
     private runSolver() {
         const controlDict : string = readFileSync(path.join(this.settings.rootUri.replace("file://",''), 'system/controlDict'), 'ascii');
-        let solver = fp.getEntryValue("application", controlDict);
+        let solver : string;
+        for (const entry of this.getKeywordValue(controlDict, "application")) {
+            // Last one wins
+            solver = entry;
+        }
 
         var results: ParsedError;// = ["", "", "", "", []];
 
@@ -209,8 +250,8 @@ export class Validator {
             );
             problems.push(problem);
         } catch {
-            // TODO: If can't get diagnostics, say so
-            console.warn("Could not get diagnostics...");
+            // If can't get diagnostics, just stay silent
+            //console.warn("Could not get diagnostics...");
         }
 
         return problems;

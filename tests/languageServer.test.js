@@ -1,6 +1,6 @@
 const fs = require('fs');
 const lsp = require('vscode-languageserver-types');
-const treeParser = require('../out/foamfile-language-service/foamTreeParser.js').getParser();
+const treeParser = require('../lib/foamfile-language-service/foamTreeParser.js').getParser();
 
 
 // Typical dictionary content for OpenFOAM cases
@@ -57,7 +57,7 @@ ty
 
 test('Get all symbols in a dictionary',
     () => {
-        const parser = require('../out/foamfile-language-service/foamSymbols');
+        const parser = require('../lib/foamfile-language-service/foamSymbols');
         const syms = new parser.FoamSymbols(treeParser);
         const expectedSyms = 
         [
@@ -76,7 +76,7 @@ test('Get all symbols in a dictionary',
 test('Get macro keyword definition (Absolute path)',
     () => {
         // Test to see if definition for $:tool.list is correctly found
-        const parser = require('../out/foamfile-language-service/foamDefinition');
+        const parser = require('../lib/foamfile-language-service/foamDefinition');
         const syms = new parser.FoamDefinition(treeParser);
         const expectedSyms = [32, 9]; 
         let keys = syms.computeDefinition("", testContent, lsp.Position.create(34, 20));//.map(a => a.name);
@@ -87,8 +87,8 @@ test('Get macro keyword definition (Absolute path)',
 test('Get Hover documentation for a keyword',
     () => {
         // Testing the "type" keyword
-        const parser = require('../out/foamfile-language-service/foamHover');
-        const markup = require('../out/foamfile-language-service/foamMarkdown');
+        const parser = require('../lib/foamfile-language-service/foamHover');
+        const markup = require('../lib/foamfile-language-service/foamMarkdown');
         const docs = new markup.MarkdownDocumentation();
         const hover = new parser.FoamHover(docs, null, treeParser);
         const syms = hover.onHover(testContent, lsp.Position.create(24, 1), [lsp.MarkupKind.Markdown]);
@@ -100,8 +100,8 @@ test('Get Hover documentation for a keyword',
 test('Get Signature help for a keyword',
     () => {
         // Testing the "type" keyword
-        const parser = require('../out/foamfile-language-service/foamSignatures')
-        const markup = require('../out/foamfile-language-service/foamPlainText');
+        const parser = require('../lib/foamfile-language-service/foamSignatures')
+        const markup = require('../lib/foamfile-language-service/foamPlainText');
         const docs = new markup.PlainTextDocumentation();
         const signatures = new parser.FoamSignatures(treeParser);
         const syms = signatures.computeSignatures(testContent, lsp.Position.create(24, 1));
@@ -116,9 +116,9 @@ test('Get Signature help for a keyword',
 test('Get Completion item for a keyword',
     () => {
         // Testing completion on "type" keyword when typing "ty"
-        const parser = require('../out/foamfile-language-service/foamAssist')
-        const markup = require('../out/foamfile-language-service/foamPlainText');
-        const fc = require('../out/foamfile-language-service/foamCompletion')
+        const parser = require('../lib/foamfile-language-service/foamAssist')
+        const markup = require('../lib/foamfile-language-service/foamPlainText');
+        const fc = require('../lib/foamfile-language-service/foamCompletion')
         const docs = new markup.PlainTextDocumentation();
         const document = lsp.TextDocument.create("", "foam", 0, testContent );
         const capabs = [];

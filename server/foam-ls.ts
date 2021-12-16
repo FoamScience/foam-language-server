@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /*
     Main language server initialization and control
 */
@@ -280,11 +281,11 @@ function validateTextDocument(textDocument: TextDocument): void {
 	if (configurationSupport) {
 		getValidatorConfiguration(textDocument.uri).then((config: ValidatorConfiguration) => {
 			const fileSettings = convertValidatorConfiguration(config);
-			const diagnostics = service.validate(textDocument.getText(), fileSettings);
+			const diagnostics = service.validate(textDocument.getText(), service.getTreeParser(), fileSettings);
 			connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
 		});
 	} else {
-		const diagnostics = service.validate(textDocument.getText(), validatorSettings);
+		const diagnostics = service.validate(textDocument.getText(), service.getTreeParser(), validatorSettings);
 		connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
 	}
 }
