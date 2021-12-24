@@ -1,6 +1,6 @@
 {
   "name": "foam-language-server",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "A language server implementation for OpenFOAM file format.",
   "keywords": [
     "language",
