@@ -9,7 +9,7 @@ import {
 	createConnection, InitializeParams, InitializeResult, ClientCapabilities,
 	TextDocumentPositionParams, TextDocumentSyncKind, TextDocument, DocumentUri, TextEdit, Hover,
 	CompletionItem, CodeActionParams, Command, ExecuteCommandParams,
-	DocumentSymbolParams, SymbolInformation, SignatureHelp,
+	DocumentSymbolParams, WorkspaceSymbolParams, SymbolInformation, SignatureHelp,
 	DocumentFormattingParams, DocumentRangeFormattingParams, DocumentOnTypeFormattingParams, DocumentHighlight,
 	RenameParams, Range, WorkspaceEdit, Location,
 	DidChangeTextDocumentParams, DidOpenTextDocumentParams, DidCloseTextDocumentParams, TextDocumentContentChangeEvent,
@@ -258,7 +258,8 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
 	    				]
 	    			}
 	    		} : undefined,
-	    		foldingRangeProvider: true
+	    		foldingRangeProvider: true,
+                workspaceSymbolProvider: true,
 	    	} as any,
 	    }
 });
@@ -558,6 +559,19 @@ connection.onDocumentSymbol((documentSymbolParams: DocumentSymbolParams): Promis
 		return [];
 	});
 });
+
+connection.onWorkspaceSymbol((workspaceSymbolParams: WorkspaceSymbolParams): PromiseLike<SymbolInformation[]> => {
+    var wSymbols : SymbolInformation[] = [];
+	for (const uri in documents) {
+        for (const sym of service.computeSymbols(documents[uri], documents[uri].getText())) {
+            wSymbols.push(sym);
+        }
+	}
+    //return wSymbols;
+    return new Promise((resolve) => {
+        resolve(wSymbols);
+    });
+})
 
 connection.onDocumentFormatting((documentFormattingParams: DocumentFormattingParams): PromiseLike<TextEdit[]> => {
 	return getDocument(documentFormattingParams.textDocument.uri).then((document) => {

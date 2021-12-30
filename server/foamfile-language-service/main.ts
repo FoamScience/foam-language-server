@@ -92,6 +92,16 @@ export interface Capabilities {
          */
         contentFormat?: MarkupKind[];
     }
+
+    /**
+     * Capabilities related to workspace requests
+     */
+    workspace?: {
+        /**
+         * If set, the server may recieve requests for workspace/symbol
+         */
+        symbol?: boolean;
+    }
 }
 export interface FormatterSettings extends FormattingOptions {
 
