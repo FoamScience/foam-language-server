@@ -16,9 +16,10 @@ We're supporting the following features (`*` for partial or limited support):
     - [x] Common keywords `*`
     - [x] Snippets (with documentation) `*`
     - [ ] Valid entries based on the "Banana Trick" `?`
-- **Document symbols** [Complete, works on a single file]
+- **Document symbols** [Complete]
     - [x] Uses the Tree-Sitter grammar for OpenFOAM
     - [x] Can penetrate lists and peek inside
+    - [x] Workspace-wide symbols
 - **Jump to Definition** [Complete, works on a single file]
     - [x] Macro expansion of absolute paths
     - [x] Macro expansion of dictionary-relative paths
@@ -29,7 +30,7 @@ We're supporting the following features (`*` for partial or limited support):
 - **Diagnostics** [Not fully implemented Yet,]
     - [x] Can handle most default `FATAL ERROR`s and `FATAL IO ERROR`s
     - [x] Needs to run the solver, so you'll get one error at a time
-    - [ ] Workspace-wide
+    - [x] Workspace-wide
     - [ ] Support for warnings
     - [ ] Custom error regular expressions
 
