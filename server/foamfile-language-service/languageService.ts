@@ -139,7 +139,7 @@ export class LanguageService implements FoamLanguageService {
         return foamSemanticTokens.computeSemanticTokens();
     }
 
-    public validate(content: string, parser: TreeParser, settings?: FoamUtils.ValidatorSettings): Diagnostic[] {
+    public validate(content: string, parser: TreeParser, settings?: FoamUtils.ValidatorSettings): [TextDocumentIdentifier[], Diagnostic[]] {
         return FoamUtils.validate(content, parser, settings);
     }
 

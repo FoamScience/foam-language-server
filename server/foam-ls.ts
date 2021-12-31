@@ -260,6 +260,11 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
 	    		} : undefined,
 	    		foldingRangeProvider: true,
                 workspaceSymbolProvider: true,
+                workspace: {
+                    workspaceFolders: {
+                        changeNotification: true,
+                    },
+                },
 	    	} as any,
 	    }
 });
@@ -282,12 +287,16 @@ function validateTextDocument(textDocument: TextDocument): void {
 	if (configurationSupport) {
 		getValidatorConfiguration(textDocument.uri).then((config: ValidatorConfiguration) => {
 			const fileSettings = convertValidatorConfiguration(config);
-			const diagnostics = service.validate(textDocument.getText(), service.getTreeParser(), fileSettings);
-			connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
+			const [uris, diagnostics] = service.validate(textDocument.getText(), service.getTreeParser(), fileSettings);
+            if (uris.length > 0) {
+			    connection.sendDiagnostics({ uri: uris[0].uri, diagnostics });
+            }
 		});
 	} else {
-		const diagnostics = service.validate(textDocument.getText(), service.getTreeParser(), validatorSettings);
-		connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
+		const [uris, diagnostics] = service.validate(textDocument.getText(), service.getTreeParser(), validatorSettings);
+        if (uris.length > 0) {
+		    connection.sendDiagnostics({ uri: uris[0].uri, diagnostics });
+        }
 	}
 }
 

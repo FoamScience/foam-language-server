@@ -4,13 +4,14 @@
 
     Current Status:
     - Can run a solver and parse common error messages and valid entries
+    - Returns the URI to the erronous file if any, so it's workspace-ready
 
     Possible Improvements:
     - Support OF9 and if possible ESI version
 */
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { Diagnostic, DiagnosticSeverity, DiagnosticTag, Position, Range } from 'vscode-languageserver-types';
+import { Diagnostic, DiagnosticSeverity, DiagnosticTag, Position, Range, DocumentUri, TextDocumentIdentifier } from 'vscode-languageserver-types';
 import { ValidationCode, ValidationSeverity, ValidatorSettings } from './main';
 
 import * as TreeParser from 'tree-sitter'
@@ -28,11 +29,12 @@ const usr_bins = process.env.FOAM_USER_APPBIN
 
 // A representation of an OpenFOAM error
 export class ParsedError {
-     public errorType: string;
-     public message: string;
-     public start: number;
-     public end: number;
-     public options: string[];
+    uri: DocumentUri;
+    errorType: string;
+    message: string;
+    start: number;
+    end: number;
+    options: string[];
 }
 
 export class Validator {
@@ -66,12 +68,19 @@ export class Validator {
         - End position
         - Valid entries (optional) for completion
     */
-    parseFoamError(text: string) {
+    parseFoamError(text: string) : ParsedError {
 
         const result = new ParsedError();
 
         // Prepare text string (what's in stderr)
         text = text.replace(/\r?\n/g, " ").replace(/\s+/, " ")
+
+        // Extract first file name appearning
+        const fileRegExp : RegExp = /file:?\s*([-\w\/\.\+]+)/
+        const filenames : RegExpMatchArray = text.match(fileRegExp);
+        if (filenames.length > 1) {
+            result.uri = ["file://", filenames[1]].join('');
+        }
 
         // Parse fatal errors
         const fatalErrorRegexp : RegExp = /FOAM FATAL ERROR/
@@ -141,6 +150,7 @@ export class Validator {
         }
 
         return {
+            uri: this.document.uri,
             errorType: "",
             message: "",
             start: 0,
@@ -232,9 +242,10 @@ export class Validator {
     /*
        Compute diagnostics
     */
-    validate(document: TextDocument): Diagnostic[] {
+    validate(document: TextDocument): [TextDocumentIdentifier[], Diagnostic[]] {
         this.document = document;
         let problems: Diagnostic[] = [];
+        let uris: TextDocumentIdentifier[] = [];
 
         try {
             const result = this.runSolver();
@@ -249,12 +260,15 @@ export class Validator {
                 `${of_fork}-${of_version}(${of_compile_option})`,
             );
             problems.push(problem);
+            // For URIs, falling back to current file if parsing the error text
+            // didn't reveal a file
+            uris.push({ uri: (result.uri === undefined ? document.uri : result.uri ) })
         } catch {
             // If can't get diagnostics, just stay silent
             //console.warn("Could not get diagnostics...");
         }
 
-        return problems;
+        return [uris, problems];
     }
 
     // Supported types of OpenFOAM errors
