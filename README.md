@@ -90,7 +90,7 @@ give up some features for things to work on other editors.
 ### Can I run it on Windows?
 
 Sure, you can. It's basically a piece of C++/JavaScript technology which has nothing to
-do with OpenFOAM code base (other parsing than its file format, of course).
+do with OpenFOAM code base (other than parsing its file format, of course).
 
 Currently the only feature which has a slim chance of working on Windows
 is the "diagnostics" feature, because it needs to fire the case's solver to see if it errors
