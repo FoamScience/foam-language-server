@@ -25,7 +25,7 @@ import { FoamCompletion } from './foamCompletion';
 import { FoamSymbols } from './foamSymbols';
 import { resolve } from 'url';
 
-import * as TreeParser from 'tree-sitter'
+import * as TreeParser from 'web-tree-sitter';
 
 export class FoamAssist {
 

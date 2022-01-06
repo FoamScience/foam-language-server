@@ -14,7 +14,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { Diagnostic, DiagnosticSeverity, DiagnosticTag, Position, Range, DocumentUri, TextDocumentIdentifier } from 'vscode-languageserver-types';
 import { ValidationCode, ValidationSeverity, ValidatorSettings } from './main';
 
-import * as TreeParser from 'tree-sitter'
+import * as TreeParser from 'web-tree-sitter';
 
 import { spawnSync, execSync } from 'child_process';
 import { writeFile,readFileSync } from 'fs';
@@ -172,7 +172,7 @@ export class Validator {
         while (reached_root == false) 
         {
             let values = [];
-            let node = cursor.currentNode;
+            let node = cursor.currentNode();
             // If a node matches the keyword
             if (node.type == 'key_value' && node.namedChild(0).text == keyword){
                 for (const { index, value } of node.children.map((value, index) => ({ index, value }))) {

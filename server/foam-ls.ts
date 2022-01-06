@@ -177,7 +177,7 @@ connection.onInitialized(() => {
 });
 
 connection.onInitialize(async (params: InitializeParams): Promise<InitializeResult> => {
-        service.setTreeParser();
+        await service.setTreeParser();
 	    setServiceCapabilities(params.capabilities);
 	    applyEditSupport = params.capabilities.workspace && params.capabilities.workspace.applyEdit === true;
 	    documentChangesSupport = params.capabilities.workspace && params.capabilities.workspace.workspaceEdit && params.capabilities.workspace.workspaceEdit.documentChanges === true;

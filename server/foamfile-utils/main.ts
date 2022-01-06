@@ -8,7 +8,7 @@ import { DocumentUri, TextDocument } from 'vscode-languageserver-textdocument';
 import { Position, Range, Diagnostic, TextEdit, FormattingOptions, TextDocumentIdentifier } from 'vscode-languageserver-types';
 import { Validator } from './foamValidator';
 
-import * as TreeParser from 'tree-sitter'
+import * as TreeParser from 'web-tree-sitter';
 
 // The formatter is not used
 export interface FormatterSettings extends FormattingOptions {

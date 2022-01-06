@@ -7,7 +7,7 @@ import {
 } from 'vscode-languageserver-types';
 import { ValidatorSettings } from '../foamfile-utils/main';
 import { LanguageService } from './languageService';
-import * as TreeParser from 'tree-sitter'
+import * as TreeParser from 'web-tree-sitter';
 
 /**
  * An interface for logging errors encountered in the language service.
@@ -158,6 +158,6 @@ export interface FoamLanguageService {
     //formatOnType(content: string, position: Position, ch: string, settings: FormatterSettings): TextEdit[];
 
     setLogger(logger: ILogger): void;
-    setTreeParser(): void;
+    setTreeParser(): Promise<void>;
     getTreeParser(): TreeParser;
 }

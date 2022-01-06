@@ -13,7 +13,7 @@
 'use strict';
 
 import { TextDocument, Position, Range, Location, TextDocumentIdentifier } from 'vscode-languageserver-types';
-import * as TreeParser from 'tree-sitter'
+import * as TreeParser from 'web-tree-sitter';
 
 export class FoamDefinition {
 
@@ -89,14 +89,14 @@ export class FoamDefinition {
         let prec = 0;
 
         // If this is the root node (hopefully), enter the tree
-        if (cursor.currentNode.type == "source_file") {
+        if (cursor.currentNode().type == "foam") {
             cursor.gotoFirstChild();
         }
 
         // Find all dictionaries down to the last dictionary level just before
         // the matching keyword
         while (prec != nodeParents.length-1) {
-            node = cursor.currentNode;
+            node = cursor.currentNode();
             // If this is a dict matching a requested parent
             if (node.type == "dict" && node.namedChild(0).text == nodeParents[prec])
             {
@@ -110,7 +110,7 @@ export class FoamDefinition {
 
         // Find the matching key-value pair
         while (prec != nodeParents.length) {
-            node = cursor.currentNode;
+            node = cursor.currentNode();
             // If it's a dict_core, skip to the its content
             if (node.type == "dict_core") {
                 if (cursor.gotoFirstChild()) continue;
@@ -123,7 +123,7 @@ export class FoamDefinition {
                 if (cursor.gotoNextSibling()) continue;
             }
         }
-        return cursor.currentNode.namedChild(1);
+        return cursor.currentNode().namedChild(1);
     }
 
     // Computes where the definition of a keyword is

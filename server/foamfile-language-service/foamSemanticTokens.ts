@@ -12,7 +12,7 @@
 import { Range, TextDocument, Position, SemanticTokens, SemanticTokenTypes, SemanticTokenModifiers, TextDocumentIdentifier } from 'vscode-languageserver-types';
 import { Util } from './foam';
 
-import * as TreeParser from 'tree-sitter'
+import * as TreeParser from 'web-tree-sitter';
 
 export class TokensLegend {
 

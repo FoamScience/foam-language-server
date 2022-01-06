@@ -14,7 +14,7 @@ import { TextDocument, Hover, Position, MarkupKind } from 'vscode-languageserver
 import { MarkdownDocumentation } from './foamMarkdown';
 import { PlainTextDocumentation } from './foamPlainText';
 
-import * as TreeParser from 'tree-sitter'
+import * as TreeParser from 'web-tree-sitter';
 
 export class FoamHover {
 
