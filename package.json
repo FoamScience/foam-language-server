@@ -7,7 +7,7 @@
     "editor",
     "openfoam"
   ],
-  "main": "out/server.js",
+  "main": "lib/foam-ls.js",
   "scripts": {
     "install": "tsc --build",
     "clean": "tsc --build --clean",
