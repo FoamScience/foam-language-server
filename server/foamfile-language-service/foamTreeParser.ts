@@ -6,13 +6,15 @@
     Does initialization work for the parser
 */
 
-import * as Parser from 'tree-sitter'
-import * as FoamLanguage from 'tree-sitter-foam'
+import * as Parser from 'web-tree-sitter';
+
 
 // This function is useful for testing things with the tree parser :)
-export function getParser() : Parser {
+export async function getParser() : Promise<Parser> {
+    await Parser.init();
     const parser = new Parser();
-    parser.setLanguage(FoamLanguage);
+    const Lang = await Parser.Language.load(`${__dirname}/../../languages/foam.wasm`);
+    parser.setLanguage(Lang);
     return parser;
 }
 

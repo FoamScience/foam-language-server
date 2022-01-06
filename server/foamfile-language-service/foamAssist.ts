@@ -25,7 +25,7 @@ import { FoamCompletion } from './foamCompletion';
 import { FoamSymbols } from './foamSymbols';
 import { resolve } from 'url';
 
-import * as TreeParser from 'tree-sitter'
+import * as TreeParser from 'web-tree-sitter';
 
 export class FoamAssist {
 
@@ -58,6 +58,13 @@ export class FoamAssist {
         let offset = this.document.offsetAt(position);
         let content = document.getText().substring(Math.min(offset-50, 0), offset);
         let tokens = content.split(/\s|\n|\r/);
+        return tokens[tokens.length-1];
+    }
+    
+    private getLineAtPosition(document: TextDocument, position: Position): string {
+        let offset = this.document.offsetAt(position);
+        let content = document.getText().substring(Math.min(offset-50, 0), offset);
+        let tokens = content.split(/\n|\r/);
         return tokens[tokens.length-1];
     }
     
@@ -104,17 +111,21 @@ export class FoamAssist {
             }
         }
 
-        // TODO: if first char is space/tab, suggest values/parameters only for current keyword
-
-        // Always suggest keywords
-        for (let entry of KEYWORDS) {
-            if (entry.startsWith(word)) {
-                proposals.push({
-			    	label: entry,
-			    	kind: CompletionItemKind.Keyword,
-			    	data: entry
-                });
+        // Suggest keywords if line does not contain a space after a word
+        const line = this.getLineAtPosition(this.document, position);
+        if (line && line.match(/\S\s+\S?/) == null) {
+            // The keyword part
+            for (let entry of KEYWORDS) {
+                if (entry.startsWith(word)) {
+                    proposals.push({
+		    	    	label: entry,
+		    	    	kind: CompletionItemKind.Keyword,
+		    	    	data: entry
+                    });
+                }
             }
+        } else {
+            // TODO: the value part, maybe the banana trick will go here 
         }
 
         // II. Snippets

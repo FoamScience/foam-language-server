@@ -9,7 +9,7 @@ import {
 	createConnection, InitializeParams, InitializeResult, ClientCapabilities,
 	TextDocumentPositionParams, TextDocumentSyncKind, TextDocument, DocumentUri, TextEdit, Hover,
 	CompletionItem, CodeActionParams, Command, ExecuteCommandParams,
-	DocumentSymbolParams, SymbolInformation, SignatureHelp,
+	DocumentSymbolParams, WorkspaceSymbolParams, SymbolInformation, SignatureHelp,
 	DocumentFormattingParams, DocumentRangeFormattingParams, DocumentOnTypeFormattingParams, DocumentHighlight,
 	RenameParams, Range, WorkspaceEdit, Location,
 	DidChangeTextDocumentParams, DidOpenTextDocumentParams, DidCloseTextDocumentParams, TextDocumentContentChangeEvent,
@@ -177,7 +177,7 @@ connection.onInitialized(() => {
 });
 
 connection.onInitialize(async (params: InitializeParams): Promise<InitializeResult> => {
-        service.setTreeParser();
+        await service.setTreeParser();
 	    setServiceCapabilities(params.capabilities);
 	    applyEditSupport = params.capabilities.workspace && params.capabilities.workspace.applyEdit === true;
 	    documentChangesSupport = params.capabilities.workspace && params.capabilities.workspace.workspaceEdit && params.capabilities.workspace.workspaceEdit.documentChanges === true;
@@ -258,7 +258,13 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
 	    				]
 	    			}
 	    		} : undefined,
-	    		foldingRangeProvider: true
+	    		foldingRangeProvider: true,
+                workspaceSymbolProvider: true,
+                workspace: {
+                    workspaceFolders: {
+                        changeNotification: true,
+                    },
+                },
 	    	} as any,
 	    }
 });
@@ -281,12 +287,16 @@ function validateTextDocument(textDocument: TextDocument): void {
 	if (configurationSupport) {
 		getValidatorConfiguration(textDocument.uri).then((config: ValidatorConfiguration) => {
 			const fileSettings = convertValidatorConfiguration(config);
-			const diagnostics = service.validate(textDocument.getText(), service.getTreeParser(), fileSettings);
-			connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
+			const [uris, diagnostics] = service.validate(textDocument.getText(), service.getTreeParser(), fileSettings);
+            if (uris.length > 0) {
+			    connection.sendDiagnostics({ uri: uris[0].uri, diagnostics });
+            }
 		});
 	} else {
-		const diagnostics = service.validate(textDocument.getText(), service.getTreeParser(), validatorSettings);
-		connection.sendDiagnostics({ uri: textDocument.uri, diagnostics });
+		const [uris, diagnostics] = service.validate(textDocument.getText(), service.getTreeParser(), validatorSettings);
+        if (uris.length > 0) {
+		    connection.sendDiagnostics({ uri: uris[0].uri, diagnostics });
+        }
 	}
 }
 
@@ -558,6 +568,19 @@ connection.onDocumentSymbol((documentSymbolParams: DocumentSymbolParams): Promis
 		return [];
 	});
 });
+
+connection.onWorkspaceSymbol((workspaceSymbolParams: WorkspaceSymbolParams): PromiseLike<SymbolInformation[]> => {
+    var wSymbols : SymbolInformation[] = [];
+	for (const uri in documents) {
+        for (const sym of service.computeSymbols(documents[uri], documents[uri].getText())) {
+            wSymbols.push(sym);
+        }
+	}
+    //return wSymbols;
+    return new Promise((resolve) => {
+        resolve(wSymbols);
+    });
+})
 
 connection.onDocumentFormatting((documentFormattingParams: DocumentFormattingParams): PromiseLike<TextEdit[]> => {
 	return getDocument(documentFormattingParams.textDocument.uri).then((document) => {

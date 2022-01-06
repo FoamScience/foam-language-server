@@ -15,7 +15,7 @@ import {
 import { PlainTextDocumentation } from './foamPlainText';
 import { FoamHover } from './foamHover';
 
-import * as TreeParser from 'tree-sitter'
+import * as TreeParser from 'web-tree-sitter';
 
 export class FoamSignatures {
 

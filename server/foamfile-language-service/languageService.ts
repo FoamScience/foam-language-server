@@ -20,8 +20,9 @@ import { MarkdownDocumentation } from "./foamMarkdown";
 import { FoamCompletion } from "./foamCompletion";
 import { FoamSemanticTokens } from "./foamSemanticTokens";
 import { FoamFolding } from "./foamFolding";
-import * as TreeParser from 'tree-sitter'
-import { getParser } from './foamTreeParser'
+const Parser = require('web-tree-sitter');
+type TreeParser = typeof Parser;
+//import { getParser } from './foamTreeParser'
 //import { FoamFormatter } from "./foamFormatter";
 
 type Await<T> = T extends PromiseLike<infer U> ? U : T
@@ -43,8 +44,12 @@ export class LanguageService implements FoamLanguageService {
         this.logger = logger;
     }
 
-    public setTreeParser(): void {
-        this.parser = getParser();
+    public async setTreeParser() : Promise<void> {
+        await Parser.init();
+        this.parser = new Parser;
+        const foamLanguage = await Parser.Language.load(`${__dirname}/../../languages/foam.wasm`);
+        this.parser.setLanguage(foamLanguage);
+        return;
     }
 
     public getTreeParser() : TreeParser {
@@ -139,7 +144,7 @@ export class LanguageService implements FoamLanguageService {
         return foamSemanticTokens.computeSemanticTokens();
     }
 
-    public validate(content: string, parser: TreeParser, settings?: FoamUtils.ValidatorSettings): Diagnostic[] {
+    public validate(content: string, parser: TreeParser, settings?: FoamUtils.ValidatorSettings): [TextDocumentIdentifier[], Diagnostic[]] {
         return FoamUtils.validate(content, parser, settings);
     }
 

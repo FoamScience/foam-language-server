@@ -14,7 +14,7 @@
 
 import { TextDocument, SymbolInformation, SymbolKind, Range, TextDocumentIdentifier } from 'vscode-languageserver-types';
 import { writeFile,readFileSync } from 'fs';
-import * as TreeParser from 'tree-sitter'
+import * as TreeParser from 'web-tree-sitter';
 
 export class FoamSymbols {
 
@@ -56,12 +56,12 @@ export class FoamSymbols {
             while (reached_root == false) 
             {
                 let names : string[];
-                let node = cursor.currentNode;
+                let node = cursor.currentNode();
                 // Capture keyword parents, including lists
                 if (node.type == 'key_value'){
                     let names :string[] = [node.namedChild(0).text];
                     let parent = node.parent;
-                    while (parent != tree.rootNode){
+                    while (parent != tree.rootNode && parent != null){
                         if (parent.type == 'list') {
                             if (onlyReferable) {
                                 // Skip what's inside the list if only referable 
@@ -70,12 +70,12 @@ export class FoamSymbols {
                                 if (cursor.gotoNextSibling()) continue;
                                 break;
                             }
-                            names.unshift(parent.firstNamedChildForIndex(0).text)
+                            names.unshift(parent.firstNamedChild.text)
                             parent = parent.parent
-                            names.unshift(parent.firstNamedChildForIndex(0).text)
+                            names.unshift(parent.firstNamedChild.text)
                         }
                         if (parent.type == 'dict') {
-                            names.unshift(parent.firstNamedChildForIndex(0).text)
+                            names.unshift(parent.firstNamedChild.text)
                         }
                         parent = parent.parent;
                     }
@@ -119,9 +119,9 @@ export class FoamSymbols {
                 if (node.type == 'dict'){
                     let names :string[] = [node.namedChild(0).text];
                     let parent = node.parent;
-                    while (parent != tree.rootNode){
+                    while (parent != tree.rootNode && parent != null){
                         if (parent.type == 'dict') {
-                            names.unshift(parent.firstNamedChildForIndex(0).text)
+                            names.unshift(parent.firstNamedChild.text)
                         }
                         parent = parent.parent;
                     }
