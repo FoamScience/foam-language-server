@@ -48,6 +48,6 @@
   },
   "contributes": {
     "configuration": [
-    ],
-  },
+    ]
+  }
 }
