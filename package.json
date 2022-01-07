@@ -1,6 +1,6 @@
 {
   "name": "foam-language-server",
-  "version": "0.1.0",
+  "version": "0.1.3",
   "description": "A language server implementation for OpenFOAM file format.",
   "keywords": [
     "language",
@@ -8,10 +8,10 @@
     "openfoam"
   ],
   "main": "lib/foam-ls.js",
+  "types": "lib/foam-ls.d.ts",
   "scripts": {
-    "install": "tsc --build",
+    "prepublish": "tsc --build",
     "clean": "tsc --build --clean",
-    "wasm": "node test-wasm.js",
     "test": "jest"
   },
   "author": "Mohammed Elwardi Fadeli",
@@ -20,7 +20,7 @@
     "node": "*"
   },
   "bin": {
-    "foam-ls": "./lib/foam-ls.js"
+    "foam-ls": "./bin/foam-ls"
   },
   "dependencies": {
     "tree-sitter-foam": "^0.2.0",

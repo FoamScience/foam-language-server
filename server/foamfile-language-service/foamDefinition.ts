@@ -33,7 +33,7 @@ export class FoamDefinition {
     }
 
     // Returns the macro node at current position 
-    public getNodeUnderCursor(content: string, position: Position) {
+    public getMacroNodeUnderCursor(content: string, position: Position) {
         let document : TextDocument = TextDocument.create("", "foam", 0, content);
         let offset = document.offsetAt(position)
         const tree = this.treeParser.parse(content);
@@ -58,7 +58,7 @@ export class FoamDefinition {
             }
             root = closestNode;
         }
-        while(root.type != "macro" && root != tree.rootNode) {
+        while(root != null && root.type != "macro" && root != tree.rootNode) {
             root = root.parent
         }
         return root;
@@ -67,7 +67,8 @@ export class FoamDefinition {
     // Return the node which defines the content of passed node
     // "node" is assumed to be an indentifier under a macro
     // i.e. its text starts with "$"
-    public getNodeDefinition(node: TreeParser.SyntaxNode, content: string) {
+    // Returns null if current node is not a macro node
+    public getNodeDefinition(node: TreeParser.SyntaxNode, content: string) : TreeParser.SyntaxNode | null {
 
         // Return the same node if not a macro-like
         if (!node.text.startsWith('$')) { return node; }
@@ -83,19 +84,19 @@ export class FoamDefinition {
         //   retrace parents until finding a dict 
         // Issues:
         // - Tree-Sitter walk does not like parent retracing
-        let nodeParents = node.text.replace('$:', '').split('.');
+        let nodeParents = node == null ? [] : node.text.replace('$:', '').split('.');
 
         // This parameter denotes how much of node parents we've found
         let prec = 0;
 
         // If this is the root node (hopefully), enter the tree
-        if (cursor.currentNode().type == "foam") {
+        if (cursor.currentNode() != null && cursor.currentNode().type == "foam") {
             cursor.gotoFirstChild();
         }
 
         // Find all dictionaries down to the last dictionary level just before
         // the matching keyword
-        while (prec != nodeParents.length-1) {
+        while (node != null && prec != nodeParents.length-1) {
             node = cursor.currentNode();
             // If this is a dict matching a requested parent
             if (node.type == "dict" && node.namedChild(0).text == nodeParents[prec])
@@ -109,7 +110,7 @@ export class FoamDefinition {
         }
 
         // Find the matching key-value pair
-        while (prec != nodeParents.length) {
+        while (node != null && prec != nodeParents.length) {
             node = cursor.currentNode();
             // If it's a dict_core, skip to the its content
             if (node.type == "dict_core") {
@@ -130,8 +131,15 @@ export class FoamDefinition {
     // - "Definition" for now means macro expansion
     public computeDefinition(textDocument: TextDocumentIdentifier, content: string, position: Position): Location | null {
 
-        let currentNode = this.getNodeUnderCursor(content, position);
-        let definitionNode = this.getNodeDefinition(currentNode, content);
+        let currentMacroNode = this.getMacroNodeUnderCursor(content, position);
+        if (currentMacroNode == null) {
+            return Location.create(textDocument.uri, Range.create(
+                position.line,
+                position.character,
+                position.line,
+                position.character));
+        }
+        let definitionNode = this.getNodeDefinition(currentMacroNode, content);
         let range = Range.create(
             definitionNode.startPosition.row,
             definitionNode.startPosition.column,
