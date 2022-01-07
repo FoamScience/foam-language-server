@@ -4,6 +4,7 @@
 		"module": "commonjs",
 		"moduleResolution": "node",
 		"sourceMap": true,
+        "declaration": true,
 		"lib" : [ "es2016" ],
 		"outDir": "lib"
 	},
