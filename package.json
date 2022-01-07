@@ -47,6 +47,7 @@
     "url": "https://github.com/FoamScience/foam-language-server/issues"
   },
   "contributes": {
-    "configuration": {},
+    "configuration": [
+    ],
   },
 }
