@@ -9,6 +9,13 @@
 
 An implementation of the Language Server Protocol ([LSP](https://microsoft.github.io/language-server-protocol/))
 for OpenFOAM dictionaries.
+
+Here is a quick demo of the most important features:
+
+![foam lsp demo](./foam-lsp.gif)
+
+For a more detailed explanation, check [this slide](https://foamscience.github.io/openfoam-with-neovim/) out.
+
 We're supporting the following features (`*` for partial or limited support):
 
 - **Auto-Completion** [Not fully implemented Yet]
@@ -76,6 +83,8 @@ but for those which don't, you'll have to configure it manually.
 #### LSP configuration
 
 [TODO: Section not complete]
+
+Take a look at the return value of `connection.onInitialization` in `server/foam-ls.ts` for an up-to-date list of capabilities.
 
 ## FAQ
 
