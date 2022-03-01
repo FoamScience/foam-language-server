@@ -22,7 +22,7 @@ jobs:
   build-and-test-in-centos:
     runs-on: ubuntu-latest
     container:
-      image: centos7:latest
+      image: centos:7
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-node@v2
