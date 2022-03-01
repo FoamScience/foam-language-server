@@ -19,3 +19,14 @@ jobs:
           node-version: 16
       - run: npm install
       - run: npm test
+  build-and-test-in-centos:
+    runs-on: ubuntu-latest
+    container:
+      image: centos7:latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-node@v2
+        with:
+          node-version: 16
+      - run: npm install
+      - run: npm test
