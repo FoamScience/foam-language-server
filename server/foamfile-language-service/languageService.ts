@@ -20,7 +20,7 @@ import { MarkdownDocumentation } from "./foamMarkdown";
 import { FoamCompletion } from "./foamCompletion";
 import { FoamSemanticTokens } from "./foamSemanticTokens";
 import { FoamFolding } from "./foamFolding";
-const Parser = require('web-tree-sitter');
+const Parser = require('tree-sitter');
 type TreeParser = typeof Parser;
 //import { getParser } from './foamTreeParser'
 //import { FoamFormatter } from "./foamFormatter";
@@ -95,7 +95,6 @@ export class LanguageService implements FoamLanguageService {
             let foamCompletion = new FoamCompletion();
             return foamCompletion.resolveCompletionItem(item, this.completionItemCapabilities && this.completionItemCapabilities.documentationFormat);
         }
-        console.log(item)
         return item;
     }
 

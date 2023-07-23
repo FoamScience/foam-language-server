@@ -30,7 +30,6 @@ export class FoamCompletion {
             for (let format of documentationFormat) {
                 if (format === MarkupKind.PlainText) {
                     item.documentation = this.foamPlainText.getCompletionDocs(item.data.toString());
-                    console.log(item.documentation)
                     return item;
                 } else if (format === MarkupKind.Markdown) {
                     item.documentation = this.foamMarkdown.getCompletionDocs(item.data.toString());

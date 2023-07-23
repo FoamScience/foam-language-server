@@ -13,7 +13,7 @@
 'use strict';
 
 import { TextDocument, Position, Range, Location, TextDocumentIdentifier } from 'vscode-languageserver-types';
-import * as TreeParser from 'web-tree-sitter';
+import * as TreeParser from 'tree-sitter';
 
 export class FoamDefinition {
 
@@ -61,7 +61,11 @@ export class FoamDefinition {
         while(root != null && root.type != "macro" && root != tree.rootNode) {
             root = root.parent
         }
-        return root;
+        if (root.type == "macro") {
+            return root;
+        } else {
+            return null;
+        }
     }
 
     // Return the node which defines the content of passed node
@@ -90,14 +94,14 @@ export class FoamDefinition {
         let prec = 0;
 
         // If this is the root node (hopefully), enter the tree
-        if (cursor.currentNode() != null && cursor.currentNode().type == "foam") {
+        if (cursor.currentNode != null && cursor.currentNode.type == "foam") {
             cursor.gotoFirstChild();
         }
 
         // Find all dictionaries down to the last dictionary level just before
         // the matching keyword
         while (node != null && prec != nodeParents.length-1) {
-            node = cursor.currentNode();
+            node = cursor.currentNode;
             // If this is a dict matching a requested parent
             if (node.type == "dict" && node.namedChild(0).text == nodeParents[prec])
             {
@@ -111,7 +115,7 @@ export class FoamDefinition {
 
         // Find the matching key-value pair
         while (node != null && prec != nodeParents.length) {
-            node = cursor.currentNode();
+            node = cursor.currentNode;
             // If it's a dict_core, skip to the its content
             if (node.type == "dict_core") {
                 if (cursor.gotoFirstChild()) continue;
@@ -124,13 +128,12 @@ export class FoamDefinition {
                 if (cursor.gotoNextSibling()) continue;
             }
         }
-        return cursor.currentNode().namedChild(1);
+        return cursor.currentNode.namedChild(1);
     }
 
     // Computes where the definition of a keyword is
     // - "Definition" for now means macro expansion
     public computeDefinition(textDocument: TextDocumentIdentifier, content: string, position: Position): Location | null {
-
         let currentMacroNode = this.getMacroNodeUnderCursor(content, position);
         if (currentMacroNode == null) {
             return Location.create(textDocument.uri, Range.create(
