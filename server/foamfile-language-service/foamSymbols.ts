@@ -84,40 +84,72 @@ export class FoamSymbols {
                     // and do basic token type recognition
                     let symbolType : SymbolKind;// = SymbolKind.Variable;
 
-                    if (node.namedChild(1).type == 'list') {
-                        symbolType = SymbolKind.Array;
-                    } else if (node.namedChild(1).type == 'macro') {
-                        symbolType = SymbolKind.Constant;
-                    } else if (node.namedChild(1).type == 'code') {
-                        symbolType = SymbolKind.Module;
-                    } else if (node.namedChild(1).type == 'number_literal') {
-                        symbolType = SymbolKind.Number;
-                    } else if (node.namedChild(1).type == 'string_literal') {
-                        symbolType = SymbolKind.String;
-                    } else if (node.namedChild(1).type == 'identifier'
-                        && ["on", "off", "true", "false", "yes", "no"].indexOf(node.namedChild(1).text) > -1
-                    ) {
-                        symbolType = SymbolKind.Boolean;
+                    if (node.namedChildren.length >= 2) {
+                        if (node.namedChildren[1].type == 'list') {
+                            symbolType = SymbolKind.Array;
+                        } else if (node.namedChildren[1].type == 'macro') {
+                            symbolType = SymbolKind.Constant;
+                        } else if (node.namedChildren[1].type == 'code') {
+                            symbolType = SymbolKind.Module;
+                        } else if (node.namedChildren[1].type == 'number_literal') {
+                            symbolType = SymbolKind.Number;
+                        } else if (node.namedChildren[1].type == 'string_literal') {
+                            symbolType = SymbolKind.String;
+                        } else if (node.namedChildren[1].type == 'identifier'
+                            && ["on", "off", "true", "false", "yes", "no"].indexOf(node.namedChild(1).text) > -1
+                        ) {
+                            symbolType = SymbolKind.Boolean;
+                        } else {
+                            symbolType = SymbolKind.Key;
+                        }
+
+                        yield this.createSymbolInformation(
+                            names.join('.'),
+                            textDocument.uri,
+                            Range.create(
+                                node.namedChildren[1].startPosition.row,
+                                node.namedChildren[1].startPosition.column,
+                                node.namedChildren[1].endPosition.row,
+                                node.namedChildren[1].endPosition.column
+                            ),
+                            symbolType, false
+                        );
                     } else {
-                        symbolType = SymbolKind.Key;
+                        if (node.namedChildren[0].type == 'list') {
+                            symbolType = SymbolKind.Array;
+                        } else if (node.namedChildren[0].type == 'macro') {
+                            symbolType = SymbolKind.Constant;
+                        } else if (node.namedChildren[0].type == 'code') {
+                            symbolType = SymbolKind.Module;
+                        } else if (node.namedChildren[0].type == 'number_literal') {
+                            symbolType = SymbolKind.Number;
+                        } else if (node.namedChildren[0].type == 'string_literal') {
+                            symbolType = SymbolKind.String;
+                        } else if (node.namedChildren[0].type == 'boolean')
+                        {
+                            symbolType = SymbolKind.Boolean;
+                        } else {
+                            symbolType = SymbolKind.Key;
+                        }
+
+                        yield this.createSymbolInformation(
+                            names.join('.'),
+                            textDocument.uri,
+                            Range.create(
+                                node.namedChildren[0].startPosition.row,
+                                node.namedChildren[0].startPosition.column,
+                                node.namedChildren[0].endPosition.row,
+                                node.namedChildren[0].endPosition.column
+                            ),
+                            symbolType, false
+                        );
                     }
 
-                    yield this.createSymbolInformation(
-                        names.join('.'),
-                        textDocument.uri,
-                        Range.create(
-                            node.namedChild(1).startPosition.row,
-                            node.namedChild(1).startPosition.column,
-                            node.namedChild(1).endPosition.row,
-                            node.namedChild(1).endPosition.column
-                        ),
-                        symbolType, false
-                    );
                 }
 
                 // Capture dict parents
                 if (node.type == 'dict'){
-                    let names :string[] = [node.namedChild(0).text];
+                    let names :string[] = [node.namedChildren[0].text];
                     let parent = node.parent;
                     while (parent != tree.rootNode && parent != null){
                         if (parent.type == 'dict') {

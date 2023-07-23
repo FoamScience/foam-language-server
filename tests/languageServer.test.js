@@ -54,6 +54,11 @@ ype L;
 S          $DT;
 ty
 // ************************************************************************* //
+
+fluxRequired
+{
+    pUnderFlux;
+}
 `;
 
 
@@ -70,7 +75,7 @@ test('Get all symbols in a dictionary',
             'PS', 'DT', 'MP', 'PPM', 'type', 'someOtherDict', 'someOtherDict.value', 
             'tool', 'tool.More', 'tool.list', 'tool.deeper', 'tool.deeper.index',
             'tool.deeper.inner', 'tool.deeper.evenDeeper', 'tool.deeper.evenDeeper.just',
-            'ype', 'S'
+            'ype', 'S', 'fluxRequired', 'fluxRequired.pUnderFlux'
         ];
         let keys = syms.parseSymbolInformation("", testContent).map(a => a.name);
         expect(keys.sort()).toEqual(expectedSyms.sort());
