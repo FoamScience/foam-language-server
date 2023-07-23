@@ -20,8 +20,9 @@ import { MarkdownDocumentation } from "./foamMarkdown";
 import { FoamCompletion } from "./foamCompletion";
 import { FoamSemanticTokens } from "./foamSemanticTokens";
 import { FoamFolding } from "./foamFolding";
-const Parser = require('tree-sitter');
-type TreeParser = typeof Parser;
+import * as Parser from 'tree-sitter';
+const foamLanguage = require('tree-sitter-foam');
+type TreeParser = Parser;
 //import { getParser } from './foamTreeParser'
 //import { FoamFormatter } from "./foamFormatter";
 
@@ -45,9 +46,9 @@ export class LanguageService implements FoamLanguageService {
     }
 
     public async setTreeParser() : Promise<void> {
-        await Parser.init();
-        this.parser = new Parser;
-        const foamLanguage = await Parser.Language.load(`${__dirname}/../../languages/foam.wasm`);
+        //await Parser.init();
+        this.parser = new Parser();
+        //const foamLanguage = await Parser.Language.load(`${__dirname}/../../languages/foam.wasm`);
         this.parser.setLanguage(foamLanguage);
         return;
     }
