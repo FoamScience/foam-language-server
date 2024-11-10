@@ -25,6 +25,10 @@ jobs:
       - run: pip3 install setuptools
         env:
           PYTHON: '${{ steps.py.outputs.python-path }}'
+      - name: Set macOS Build Environment
+        if: ${{ matrix.os == 'macos-latest' }}
+        run: |
+          export AR=/usr/bin/ar
       - run: npm rebuild
         env:
           NODE_GYP_FORCE_PYTHON: '${{ steps.py.outputs.python-path }}'
