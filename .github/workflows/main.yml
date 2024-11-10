@@ -25,6 +25,9 @@ jobs:
       - run: pip3 install setuptools
         env:
           PYTHON: '${{ steps.py.outputs.python-path }}'
+      - run: npm rebuild
+        env:
+          NODE_GYP_FORCE_PYTHON: '${{ steps.py.outputs.python-path }}'
       - run: npm install
         env:
           NODE_GYP_FORCE_PYTHON: '${{ steps.py.outputs.python-path }}'
