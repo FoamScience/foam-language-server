@@ -25,14 +25,14 @@ jobs:
       - run: pip3 install setuptools
         env:
           PYTHON: '${{ steps.py.outputs.python-path }}'
-      - run: npm install --ignore-scripts
+      - run: npm install tree-sitter-foam --ignore-scripts
         env:
           NODE_GYP_FORCE_PYTHON: '${{ steps.py.outputs.python-path }}'
       - run: rm node_modules/tree-sitter-foam/libtree-sitter-foam.a
-      - run: npm install tree-sitter-foam
+      - run: npm install
         env:
           NODE_GYP_FORCE_PYTHON: '${{ steps.py.outputs.python-path }}'
-      - run: npm install
+      - run: npm rebuild
         env:
           NODE_GYP_FORCE_PYTHON: '${{ steps.py.outputs.python-path }}'
       - run: npm test
