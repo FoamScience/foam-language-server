@@ -1,7 +1,7 @@
 {
   "name": "foam-language-server",
   "displayName": "OpenFOAM language server",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "A language server implementation for OpenFOAM file format.",
   "keywords": [
     "language",
@@ -25,7 +25,7 @@
   },
   "dependencies": {
     "tree-sitter": "^0.25.0",
-    "tree-sitter-foam": "file:/home/fadeli/repos/tree-sitter-foam",
+    "tree-sitter-foam": "^0.4.5",
     "vscode-languageserver": "^9.0.1",
     "vscode-languageserver-textdocument": "^1.0.12",
     "vscode-languageserver-types": "^3.17.5"
