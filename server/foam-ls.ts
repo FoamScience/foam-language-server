@@ -190,16 +190,19 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
 	    	capabilities: {
 	    		textDocumentSync: TextDocumentSyncKind.Incremental,
 	    		codeActionProvider: applyEditSupport,
-	    		completionProvider: {
-	    			resolveProvider: true,
-	    			triggerCharacters: [
-	    				'=',
-	    				' ',
-	    				'$',
-	    				'#',
-	    				'-',
-	    			]
-	    		},
+				// Turn off completion provider as no real value is added
+				// by just "macro" completion
+				completionProvider: false,
+	    		//completionProvider: {
+	    		//	resolveProvider: true,
+	    		//	triggerCharacters: [
+	    		//		'=',
+	    		//		' ',
+	    		//		'$',
+	    		//		'#',
+	    		//		'-',
+	    		//	]
+	    		//},
 	    		executeCommandProvider: applyEditSupport ? {
 	    			commands: [
 	    				CommandIds.FATAL_ERROR,

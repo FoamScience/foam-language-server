@@ -3,7 +3,12 @@
  * Licensed under the MIT License. See License.txt in the project root for license information.
  * ------------------------------------------------------------------------------------------ */
 import {
-    Position, CompletionItem, Range, CodeActionContext, Command, TextDocumentIdentifier, Location, DocumentHighlight, SymbolInformation, SignatureHelp, TextEdit, DocumentLink, Hover, FormattingOptions, Diagnostic, MarkupKind, FoldingRange, CompletionItemTag, SemanticTokens
+    Position, CompletionItem, Range,
+    CodeActionContext, Command, TextDocumentIdentifier,
+    Location, DocumentHighlight, SymbolInformation,
+    SignatureHelp, TextEdit, DocumentLink, Hover,
+    FormattingOptions, Diagnostic, MarkupKind,
+    FoldingRange, CompletionItemTag, SemanticTokens,
 } from 'vscode-languageserver-types';
 import { ValidatorSettings } from '../foamfile-utils/main';
 import { LanguageService } from './languageService';
