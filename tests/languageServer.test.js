@@ -1,6 +1,16 @@
-const fs = require('fs');
+const { test } = require('node:test');
+const assert = require('node:assert');
 const lsp = require('vscode-languageserver-types');
-const foamTreeParser = require('../lib/foamfile-language-service/foamTreeParser.js');
+const TreeSitter = require('tree-sitter');
+const foamLanguage = require('tree-sitter-foam');
+
+const foamTreeParser = {
+    async getParser() {
+        const parser = new TreeSitter();
+        parser.setLanguage(foamLanguage);
+        return parser;
+    }
+};
 
 
 // Typical dictionary content for OpenFOAM cases
@@ -68,17 +78,17 @@ test('Get all symbols in a dictionary',
         let tp = await foamTreeParser.getParser();
 
         const syms = new parser.FoamSymbols(tp);
-        const expectedSyms = 
+        const expectedSyms =
         [
             'ty', // Note that incomplete symbols are also included
             'FoamFile', 'FoamFile.class', 'FoamFile.format', 'FoamFile.location', 'FoamFile.object', 'FoamFile.version',
-            'PS', 'DT', 'MP', 'PPM', 'type', 'someOtherDict', 'someOtherDict.value', 
+            'PS', 'DT', 'MP', 'PPM', 'type', 'someOtherDict', 'someOtherDict.value',
             'tool', 'tool.More', 'tool.list', 'tool.deeper', 'tool.deeper.index',
             'tool.deeper.inner', 'tool.deeper.evenDeeper', 'tool.deeper.evenDeeper.just',
             'ype', 'S', 'fluxRequired', 'fluxRequired.pUnderFlux'
         ];
         let keys = syms.parseSymbolInformation("", testContent).map(a => a.name);
-        expect(keys.sort()).toEqual(expectedSyms.sort());
+        assert.deepStrictEqual(keys.sort(), expectedSyms.sort());
     }
 );
 
@@ -88,9 +98,9 @@ test('Get macro keyword definition (Absolute path)',
         const parser = require('../lib/foamfile-language-service/foamDefinition');
         let tp = await foamTreeParser.getParser();
         const syms = new parser.FoamDefinition(tp);
-        const expectedSyms = [32, 9]; 
+        const expectedSyms = [32, 9];
         let keys = syms.computeDefinition("", testContent, lsp.Position.create(34, 20));//.map(a => a.name);
-        expect([keys.range.start.line, keys.range.start.character]).toEqual(expectedSyms);
+        assert.deepStrictEqual([keys.range.start.line, keys.range.start.character], expectedSyms);
     }
 );
 
@@ -100,10 +110,9 @@ test('Return current position if definition requested for non-macro nodes',
         const parser = require('../lib/foamfile-language-service/foamDefinition');
         let tp = await foamTreeParser.getParser();
         const syms = new parser.FoamDefinition(tp);
-        const expectedSyms = [32, 6]; 
+        const expectedSyms = [32, 6];
         let keys = syms.computeDefinition("", testContent, lsp.Position.create(32, 6));//.map(a => a.name);
-        expect('').toBe('');
-        expect([keys.range.start.line, keys.range.start.character]).toEqual(expectedSyms);
+        assert.deepStrictEqual([keys.range.start.line, keys.range.start.character], expectedSyms);
     }
 );
 
@@ -117,7 +126,7 @@ test('Get Hover documentation for a keyword',
         const hover = new parser.FoamHover(docs, null, tp);
         const syms = hover.onHover(testContent, lsp.Position.create(24, 1), [lsp.MarkupKind.Markdown]);
         const expectedSyms = docs.getMarkdown("type").contents;
-        expect(syms.contents.value).toEqual(expectedSyms);
+        assert.deepStrictEqual(syms.contents.value, expectedSyms);
     }
 );
 
@@ -133,8 +142,8 @@ test('Get Signature help for a keyword',
         const expectedLabel = "Keyword: type";
         const expectedDocs = docs.getSignatureHelp("signature_type");
         const active = syms.activeSignature;
-        expect(syms.signatures[active].label).toEqual(expectedLabel);
-        expect(syms.signatures[active].documentation).toEqual(expectedDocs);
+        assert.strictEqual(syms.signatures[active].label, expectedLabel);
+        assert.deepStrictEqual(syms.signatures[active].documentation, expectedDocs);
     }
 );
 
@@ -143,15 +152,11 @@ test('Get Completion item for a keyword',
         // Testing completion on "type" keyword when typing "ty"
         const parser = require('../lib/foamfile-language-service/foamAssist')
         let tp = await foamTreeParser.getParser();
-        const markup = require('../lib/foamfile-language-service/foamPlainText');
-        const fc = require('../lib/foamfile-language-service/foamCompletion')
-        const docs = new markup.PlainTextDocumentation();
         const document = lsp.TextDocument.create("", "foam", 0, testContent );
         const capabs = [];
         const comps = new parser.FoamAssist(document, capabs, tp);
-        const resolver = new fc.FoamCompletion();
-        props = comps.computeProposals(lsp.Position.create(45,2));
-        expect(props[0].label).toEqual('type');
+        const props = comps.computeProposals(lsp.Position.create(45,2));
+        assert.strictEqual(props[0].label, 'type');
     }
 );
 
@@ -160,15 +165,11 @@ test('Get Completion item for a keyword value',
         // Testing completion on "type" keyword when typing "ty"
         const parser = require('../lib/foamfile-language-service/foamAssist')
         let tp = await foamTreeParser.getParser();
-        const markup = require('../lib/foamfile-language-service/foamPlainText');
-        const fc = require('../lib/foamfile-language-service/foamCompletion')
-        const docs = new markup.PlainTextDocumentation();
         const document = lsp.TextDocument.create("", "foam", 0, testContent );
         const capabs = [];
         const comps = new parser.FoamAssist(document, capabs, tp);
-        const resolver = new fc.FoamCompletion();
-        props = comps.computeProposals(lsp.Position.create(34,14));
-        expect(props[0].label).not.toEqual('type');
+        const props = comps.computeProposals(lsp.Position.create(34,14));
+        assert.notStrictEqual(props[0].label, 'type');
     }
 );
 
@@ -177,14 +178,10 @@ test('Get Completion items for a macro on $',
         // Testing completion on "type" keyword when typing "ty"
         const parser = require('../lib/foamfile-language-service/foamAssist')
         let tp = await foamTreeParser.getParser();
-        const markup = require('../lib/foamfile-language-service/foamPlainText');
-        const fc = require('../lib/foamfile-language-service/foamCompletion')
-        const docs = new markup.PlainTextDocumentation();
         const document = lsp.TextDocument.create("", "foam", 0, testContent );
         const capabs = [];
         const comps = new parser.FoamAssist(document, capabs, tp);
-        const resolver = new fc.FoamCompletion();
-        props = comps.computeProposals(lsp.Position.create(34,15));
-        expect(props[0].label).toEqual('FoamFile');
+        const props = comps.computeProposals(lsp.Position.create(34,15));
+        assert.strictEqual(props[0].label, 'FoamFile');
     }
 );

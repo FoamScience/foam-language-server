@@ -11,9 +11,10 @@
   "main": "lib/foam-ls.js",
   "types": "lib/foam-ls.d.ts",
   "scripts": {
-    "prepublish": "tsc --build",
+    "prepare": "tsc --build",
+    "pretest": "tsc --build",
     "clean": "tsc --build --clean",
-    "test": "jest"
+    "test": "node --test \"tests/*.test.js\""
   },
   "author": "Mohammed Elwardi Fadeli",
   "license": "GPL-3.0-or-later",
@@ -28,7 +29,7 @@
     "tree-sitter-foam": "^0.4.5",
     "vscode-languageserver": "^9.0.1",
     "vscode-languageserver-textdocument": "^1.0.12",
-    "vscode-languageserver-types": "^3.17.5"
+    "vscode-languageserver-types": "3.17.5"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.9",

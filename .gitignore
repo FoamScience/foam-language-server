@@ -183,3 +183,10 @@ dist
 **/.clangd    
 **@*    
 
+
+# Build output
+lib/
+
+# Local agent tooling state
+.fablize/
+.repoassist/
