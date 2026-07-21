@@ -6,12 +6,31 @@
 
 import { Range, Position } from 'vscode-languageserver-types';
 import * as KEYWORD_DATA from './data/keywords.json';
+import * as RUNTIME_DATA from './data/runtimeSelection.json';
 
 export interface KeywordEntry {
     doc?: string;
     examples?: string;
     values?: string[];
     snippet?: string;
+}
+
+export interface RuntimeEntry {
+    class?: string;
+    doc?: string;
+    src?: string;
+}
+
+// Docs for runtime-selectable classes, harvested from OpenFOAM headers by
+// tools/gen-runtime-selection.mjs (issue #15). Keyed by the TypeName
+// string — the same lookup key solvers print in "Valid options" lists.
+// A name can be registered by several classes (e.g. "linear"), hence the
+// array.
+export const RUNTIME_META: { source: string } = (RUNTIME_DATA as any)._meta;
+const RUNTIME_SELECTION: { [name: string]: RuntimeEntry[] } = (RUNTIME_DATA as any).entries;
+
+export function runtimeDoc(value: string): RuntimeEntry[] | undefined {
+    return RUNTIME_SELECTION[value];
 }
 
 // Keyword knowledge base: { "<objectName|*>": { "<keyword>": KeywordEntry } }

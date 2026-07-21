@@ -74,6 +74,19 @@ Then you can issue a pull request with a `documentation` flag.
 
 > Note that documentation for signature help is present only as Plain Text
 
+#### Regenerating runtime-selection docs
+
+`server/foamfile-language-service/data/runtimeSelection.json` maps
+runtime-selectable class names (the strings solvers print in `Valid options`
+lists, i.e. `TypeName("...")` declarations) to the `Class`/`Description`
+blocks of their OpenFOAM headers. It powers documentation for banana-trick
+completions and hover on class names. The checked-in file is a snapshot of
+one OpenFOAM version (see its `_meta.source`); to regenerate against yours:
+
+```sh
+node tools/gen-runtime-selection.mjs "$FOAM_SRC"   # or any OpenFOAM src dir
+```
+
 ### Pull Requests
 
 Please follow these steps to have your contribution considered by the maintainers:

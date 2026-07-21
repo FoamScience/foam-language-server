@@ -27,6 +27,12 @@ export class FoamCompletion {
         }
         if (!item.documentation)
         {
+            // items without a data key (e.g. index-backed proposals) have
+            // nothing to look docs up by — don't crash on item.data below
+            if (item.data === undefined || item.data === null)
+            {
+                return item;
+            }
             for (let format of documentationFormat) {
                 if (format === MarkupKind.PlainText) {
                     item.documentation = this.foamPlainText.getCompletionDocs(item.data.toString());

@@ -13,7 +13,7 @@
 'use strict';
 
 import { MarkupContent, MarkupKind } from "vscode-languageserver";
-import { KEYWORD_DB } from './foam';
+import { KEYWORD_DB, runtimeDoc } from './foam';
 
 export class PlainTextDocumentation {
 
@@ -88,11 +88,23 @@ export class PlainTextDocumentation {
         }
     }
 
+    // Plain-text docs for runtime-selectable class names (issue #15),
+    // looked up on demand — not merged into this.markdowns
+    private runtimePlain(word: string): string | undefined {
+        const entries = runtimeDoc(word);
+        if (!entries) {
+            return undefined;
+        }
+        return entries
+            .map(e => (e.class ?? word) + (e.doc ? ": " + e.doc : ""))
+            .join("\n");
+    }
+
     /*
         Returns docs for a keyword as plain text
     */
     getDocumentation(data: string): string {
-        return this.markdowns[data];
+        return this.markdowns[data] ?? this.runtimePlain(data);
     }
 
     /*
@@ -109,7 +121,7 @@ export class PlainTextDocumentation {
     getCompletionDocs(data: string): MarkupContent {
         if (this.markdowns[data] === undefined) return {
             kind: MarkupKind.PlainText,
-            value: ''
+            value: this.runtimePlain(data) ?? ''
         };
         return {
             kind: MarkupKind.PlainText,

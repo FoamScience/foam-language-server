@@ -13,7 +13,7 @@
 
 import { MarkupContent, MarkupKind } from "vscode-languageserver";
 import { Hover } from 'vscode-languageserver-types';
-import { KEYWORD_DB } from './foam';
+import { KEYWORD_DB, RUNTIME_META, runtimeDoc } from './foam';
 
 export class MarkdownDocumentation {
 
@@ -88,21 +88,49 @@ export class MarkdownDocumentation {
     //    return text.replace("${0}", variable);
     //}
 
+    // Docs for runtime-selectable class names (issue #15), looked up on
+    // demand — deliberately NOT merged into this.markdowns, which is
+    // rebuilt on every construction.
+    private runtimeMarkdown(word: string): string | undefined {
+        const entries = runtimeDoc(word);
+        if (!entries) {
+            return undefined;
+        }
+        const parts = entries.map(e => {
+            let text = "**`" + (e.class ?? word) + "`**";
+            if (e.doc) {
+                text += " — " + e.doc;
+            }
+            if (e.src) {
+                text += "\n\n*" + e.src + "*";
+            }
+            return text;
+        });
+        return parts.join("\n\n---\n\n")
+            + "\n\n*from OpenFOAM sources (" + RUNTIME_META.source + ")*";
+    }
+
     /*
         Returns docs for a keyword in markdown format
     */
     public getMarkdown(word: string): Hover {
-        return this.markdowns[word];
+        if (this.markdowns[word] !== undefined) {
+            return this.markdowns[word];
+        }
+        const runtime = this.runtimeMarkdown(word);
+        return runtime === undefined ? undefined : { contents: runtime };
     }
 
     /*
         Returns signature help for a keyword as plain text
     */
     getCompletionDocs(data: string): MarkupContent {
-        if (this.markdowns[data] === undefined) return {
-            kind: MarkupKind.Markdown,
-            value: ''
-        };
+        if (this.markdowns[data] === undefined) {
+            return {
+                kind: MarkupKind.Markdown,
+                value: this.runtimeMarkdown(data) ?? ''
+            };
+        }
         return {
             kind: MarkupKind.Markdown,
             value: this.markdowns[data].contents.toString()

@@ -26,6 +26,9 @@ We're supporting the following features (`*` for partial or limited support):
     - [x] Preprocessor directives (`#`-triggered) and snippets with documentation
     - [x] Passive "Banana Trick": `Valid options` lists harvested from solver
           errors are offered as high-priority value completions
+    - [x] Banana-trick options carry documentation extracted from OpenFOAM
+          class headers (`data/runtimeSelection.json`, regenerable against
+          your OpenFOAM version — see [CONTRIBUTING](CONTRIBUTING.md))
 - **Diagnostics** [layered]
     - [x] Instant syntax errors from the Tree-Sitter grammar (on every keystroke, no solver needed)
     - [x] Solver-based semantic errors: `FATAL ERROR`s, `FATAL IO ERROR`s and warnings,
@@ -55,6 +58,9 @@ We're supporting the following features (`*` for partial or limited support):
     - [x] Keyword knowledge base in
           [`server/foamfile-language-service/data/keywords.json`](server/foamfile-language-service/data/keywords.json)
           — one JSON file feeding completion, hover and signature docs; PRs welcome
+    - [x] Hover on runtime-selectable class names (`CrankNicolson`, `kOmegaSST`,
+          boundary condition types, ...) shows the class description harvested
+          from OpenFOAM sources
 - **Folding, Semantic Tokens, Selection Ranges**
     - [x] Implemented server-side for clients without the Tree-Sitter grammar;
           (Neo)VIM users with `:TSInstall foam` already get folding/highlighting natively
