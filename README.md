@@ -18,43 +18,52 @@ For a more detailed explanation, check [this slide](https://foamscience.github.i
 
 We're supporting the following features (`*` for partial or limited support):
 
-- **Auto-Completion** [Not fully implemented Yet]
-    - [x] Macro expansion `*` (always suggests absolute paths)
-    - [x] Common keywords `*`
-    - [x] Snippets (with documentation) `*`
-    - [ ] Valid entries based on the "Banana Trick" `?`
+- **Auto-Completion**
+    - [x] Context-aware keywords (per file kind: `controlDict`, `fvSchemes`, `fvSolution`, ...)
+    - [x] Valid values for known keywords (`stopAt`, `writeControl`, boundary condition types, ...)
+    - [x] Macro expansion, workspace-wide (`$`-triggered)
+    - [x] Boundary patch names inside `boundaryField`
+    - [x] Preprocessor directives (`#`-triggered) and snippets with documentation
+    - [x] Passive "Banana Trick": `Valid options` lists harvested from solver
+          errors are offered as high-priority value completions
+- **Diagnostics** [layered]
+    - [x] Instant syntax errors from the Tree-Sitter grammar (on every keystroke, no solver needed)
+    - [x] Solver-based semantic errors: `FATAL ERROR`s, `FATAL IO ERROR`s and warnings,
+          multiple errors per run, foundation (`.org`) and ESI (`.com`) error formats
+    - [x] Async and debounced; the solver child process is always killed
+    - [x] Workspace-wide (errors land on the file they point at)
+    - [x] LSP 3.17 pull diagnostics with push fallback for older clients
+- **Rename** [workspace-wide, OpenFOAM-aware]
+    - [x] Boundary patches: renames across `constant/polyMesh/boundary`, field files'
+          `boundaryField`, `blockMeshDict`, `createPatchDict`, `decomposeParDict`, ...
+    - [x] Exact quoted alternations like `"(front|back)"` are rewritten member-wise
+    - [x] Patch groups (`inGroups`) as their own namespace
+    - [x] Dictionary keys: updates `$macro` references through `#include` chains
+- **Find References / Document Highlight**
+    - [x] Patches, patch groups, macros and dictionary keys
+- **Jump to Definition**
+    - [x] Macro expansion: absolute (`$:a.b`), scoped (`$a`) and relative (`$.a`, `$..a`) paths
+    - [x] Cross-file resolution through `#include` chains
+    - [x] `boundaryField` patch entry → its declaration in `constant/polyMesh/boundary`
+          (falls back to `blockMeshDict`/`createPatchDict` when the mesh doesn't exist yet)
+    - [x] `#include "file"` → the included file (also exposed as document links)
 - **Document symbols** [Complete]
     - [x] Uses the Tree-Sitter grammar for OpenFOAM
     - [x] Can penetrate lists and peek inside
-    - [x] Workspace-wide symbols
-- **Jump to Definition** [Complete, works on a single file]
-    - [x] Macro expansion of absolute paths
-    - [x] Macro expansion of dictionary-relative paths
-- **Hover Documentation** [Complete, but lacks actual keywords docs]
-    - [x] Common keywords `*`
-- **Signature Help** [Complete, but lacks docs for signature help]
-    - [x] Common keywords `*`
-- **Diagnostics** [Not fully implemented Yet,]
-    - [x] Can handle most default `FATAL ERROR`s and `FATAL IO ERROR`s
-    - [x] Needs to run the solver, so you'll get one error at a time
-    - [x] Workspace-wide
-    - [ ] Support for warnings
-    - [ ] Custom error regular expressions
+    - [x] Workspace-wide symbols from the case index
+- **Hover Documentation & Signature Help**
+    - [x] Keyword knowledge base in
+          [`server/foamfile-language-service/data/keywords.json`](server/foamfile-language-service/data/keywords.json)
+          — one JSON file feeding completion, hover and signature docs; PRs welcome
+- **Folding, Semantic Tokens, Selection Ranges**
+    - [x] Implemented server-side for clients without the Tree-Sitter grammar;
+          (Neo)VIM users with `:TSInstall foam` already get folding/highlighting natively
 
-The following common LSP features will not be considered in the near future
-(and PRs to these areas are actually _discourages_):
+Not planned:
 
-- Syntax-based Folding and Highlighting
-    - Because [tree-sitter-foam](https://github.com/FoamScience/tree-sitter-foam) 
-      has these features already.
-    - All you have to do is `:TSInstall foam` (on (Neo)VIM, or equivalent)
 - Formatting
     - Please use external C++/Typescript formatters if you're obsessed with
       nice-looking code.
-- Semantic Tokenisation
-    - We have little to no semantics in OpenFOAM file format. Especially, the lack
-      of modifier-like constructs discourages extensive semantics tokenisation.
-      Node types from the Tree-Sitter grammar are enough.
 
 ## Installation and configuration
 
@@ -82,9 +91,34 @@ but for those which don't, you'll have to configure it manually.
 
 #### LSP configuration
 
-[TODO: Section not complete]
+Neovim (v0.11+, using `vim.lsp.config`):
 
-Take a look at the return value of `connection.onInitialization` in `server/foam-ls.ts` for an up-to-date list of capabilities.
+```lua
+vim.lsp.config('foam_ls', {
+    cmd = { 'foam-ls', '--stdio' },
+    filetypes = { 'foam' },
+    root_markers = { 'system/controlDict' },
+    settings = {
+        foam = {
+            languageserver = {
+                diagnostics = {
+                    -- "error" | "warning" | "ignore"
+                    fatalError = 'error',
+                    fatalIOError = 'error',
+                },
+            },
+        },
+    },
+})
+vim.lsp.enable('foam_ls')
+```
+
+Older Neovim with `nvim-lspconfig` works the same way through `lspconfig.foam_ls.setup{}`.
+
+The server talks standard LSP over stdio, so any LSP client works: point it
+at the `foam-ls` executable and make sure the workspace root is the case
+directory. For the full capability list, see the return value of
+`connection.onInitialize` in `server/foam-ls.ts`.
 
 ## FAQ
 
