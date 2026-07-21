@@ -1,0 +1,38 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      snappyHexMeshDict;
+}
+
+castellatedMeshControls
+{
+    refinementSurfaces
+    {
+        hull
+        {
+            level           (1 1);
+            patchInfo
+            {
+                type            wall;
+            }
+        }
+    }
+}
+
+addLayersControls
+{
+    layers
+    {
+        movingWall
+        {
+            nSurfaceLayers  3;
+        }
+        "(front|back)"
+        {
+            nSurfaceLayers  1;
+        }
+    }
+}

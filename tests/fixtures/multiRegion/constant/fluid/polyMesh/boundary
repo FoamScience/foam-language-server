@@ -1,0 +1,24 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       polyBoundaryMesh;
+    location    "constant/fluid/polyMesh";
+    object      boundary;
+}
+
+2
+(
+    inlet
+    {
+        type            patch;
+        nFaces          20;
+        startFace       760;
+    }
+    fluid_to_solid
+    {
+        type            mappedWall;
+        nFaces          20;
+        startFace       780;
+    }
+)

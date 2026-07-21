@@ -1,0 +1,20 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system/fluid";
+    object      decomposeParDict;
+}
+
+numberOfSubdomains 4;
+
+method          hierarchical;
+
+preservePatches (fluid_to_solid);
+
+hierarchicalCoeffs
+{
+    n               (2 2 1);
+    order           xyz;
+}

@@ -1,0 +1,32 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvOptions;
+}
+
+limitU
+{
+    type            patchMean;
+    active          true;
+
+    patchMeanCoeffs
+    {
+        patch           movingWall;
+    }
+}
+
+porosity1
+{
+    type            explicitPorositySource;
+    active          true;
+
+    explicitPorositySourceCoeffs
+    {
+        selectionMode   cellSet;
+        cellSet         porosityCells;
+        patches         (fixedWalls back);
+    }
+}

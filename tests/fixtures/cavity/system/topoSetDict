@@ -1,0 +1,29 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      topoSetDict;
+}
+
+actions
+(
+    {
+        name        f0;
+        type        faceSet;
+        action      new;
+        source      patchToFace;
+        sourceInfo
+        {
+            patch       movingWall;
+        }
+    }
+    {
+        name        f1;
+        type        faceSet;
+        action      new;
+        source      patchToFace;
+        patches     (fixedWalls front);
+    }
+);

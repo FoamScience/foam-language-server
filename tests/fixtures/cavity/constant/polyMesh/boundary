@@ -1,0 +1,38 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       polyBoundaryMesh;
+    location    "constant/polyMesh";
+    object      boundary;
+}
+
+4
+(
+    movingWall
+    {
+        type            wall;
+        inGroups        (wall);
+        nFaces          20;
+        startFace       760;
+    }
+    fixedWalls
+    {
+        type            wall;
+        inGroups        (wall);
+        nFaces          60;
+        startFace       780;
+    }
+    front
+    {
+        type            empty;
+        nFaces          400;
+        startFace       840;
+    }
+    back
+    {
+        type            empty;
+        nFaces          400;
+        startFace       1240;
+    }
+)

@@ -1,29 +1,31 @@
 /*
-    Highlighting for OpenFOAM dictionaries
-    Author: Mohammed Elwardi Fadeli
-
-    Typically, this file will never grow; PLEASE use Tree-Sitter grammar
-    for your OpenFOAM files; here is how to do it in (Neo)Vim: `:TSInstall foam`
-    Simple enough huh!
-
-    PS: Tree-Sitter queries for highlighting OpenFOAM files are located here:
-    https://github.com/FoamScience/tree-sitter-foam/blob/master/queries/highlights.scm
-
-    They already work quite well, but If you something wrong, please open an issue/PR there
-
-    Current Status:
-    - Nothing
+    Highlighting occurrences of the symbol under the cursor
+    (patches, macros, keys) — same-file slice of find-all-references.
 */
 'use strict';
 
 import {
-    TextDocument, Position, DocumentHighlight, DocumentHighlightKind
+    Position, DocumentHighlight, TextDocumentIdentifier
 } from 'vscode-languageserver-types';
+import { FoamWorkspaceIndex } from './foamWorkspaceIndex';
+import { FoamReferences } from './foamReferences';
+import * as TreeParser from 'tree-sitter';
 
 export class FoamHighlight {
 
-    public computeHighlightRanges(content: string, position: Position): DocumentHighlight[] {
-        const highlights: DocumentHighlight[] = [];
-        return highlights;
+    private treeParser: TreeParser;
+    private index: FoamWorkspaceIndex | null;
+
+    constructor(parser?: TreeParser, index?: FoamWorkspaceIndex) {
+        this.treeParser = parser;
+        this.index = index ?? null;
+    }
+
+    public computeHighlightRanges(textDocument: TextDocumentIdentifier, content: string, position: Position, parsedTree?: TreeParser.Tree): DocumentHighlight[] {
+        if (!this.treeParser) {
+            return [];
+        }
+        return new FoamReferences(this.treeParser, this.index)
+            .computeHighlights(textDocument, content, position, parsedTree);
     }
 }
