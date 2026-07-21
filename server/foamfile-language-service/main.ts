@@ -8,9 +8,9 @@ import {
     Location, DocumentHighlight, SymbolInformation,
     SignatureHelp, TextEdit, DocumentLink, Hover,
     FormattingOptions, Diagnostic, MarkupKind,
-    FoldingRange, CompletionItemTag, SemanticTokens,
+    FoldingRange, CompletionItemTag, SemanticTokens, WorkspaceEdit, InlayHint,
 } from 'vscode-languageserver-types';
-import { ValidatorSettings } from '../foamfile-utils/main';
+import { ValidatorSettings, SolverRunner } from '../foamfile-utils/main';
 import { LanguageService } from './languageService';
 import * as TreeParser from 'tree-sitter';
 
@@ -108,15 +108,6 @@ export interface Capabilities {
         symbol?: boolean;
     }
 }
-export interface FormatterSettings extends FormattingOptions {
-
-    /**
-     * Flag to indicate that instructions that span multiple lines
-     * should be ignored.
-     */
-    ignoreMultilineInstructions?: boolean;
-}
-
 export interface FoamLanguageService {
 
     setCapabilities(capabilities: Capabilities);
@@ -125,44 +116,58 @@ export interface FoamLanguageService {
 
     computeCommandEdits(content: string, command: string, args: any[]): TextEdit[];
 
-    computeCompletionItems(content: string, position: Position): CompletionItem[] | PromiseLike<CompletionItem[]>;
+    computeCompletionItems(content: string, position: Position, tree?: TreeParser.Tree, uri?: string): CompletionItem[] | PromiseLike<CompletionItem[]>;
 
     resolveCompletionItem(item: CompletionItem): CompletionItem;
 
-    computeDefinition(textDocument: TextDocumentIdentifier, content: string, position: Position): Location;
+    computeDefinition(textDocument: TextDocumentIdentifier, content: string, position: Position, tree?: TreeParser.Tree): Location;
 
-    computeFoldingRanges(content: string): FoldingRange[];
+    computeFoldingRanges(content: string, tree?: TreeParser.Tree): FoldingRange[];
 
-    computeHighlightRanges(content: string, position: Position): DocumentHighlight[];
+    computeSelectionRanges(content: string, positions: Position[], tree?: TreeParser.Tree): import('vscode-languageserver-types').SelectionRange[];
 
-    computeHover(content: string, position: Position): Hover | null;
+    computeHighlightRanges(textDocument: TextDocumentIdentifier, content: string, position: Position, tree?: TreeParser.Tree): DocumentHighlight[];
 
-    computeSymbols(textDocument: TextDocumentIdentifier, content: string): SymbolInformation[];
+    computeReferences(textDocument: TextDocumentIdentifier, content: string, position: Position, tree?: TreeParser.Tree): Location[];
 
-    computeSignatureHelp(content: string, position: Position): SignatureHelp;
+    computeHover(content: string, position: Position, tree?: TreeParser.Tree): Hover | null;
 
-    computeRename(textDocument: TextDocumentIdentifier, content: string, position: Position, newName: string): TextEdit[];
+    computeSymbols(textDocument: TextDocumentIdentifier, content: string, tree?: TreeParser.Tree): SymbolInformation[];
 
-    prepareRename(content: string, position: Position): Range | null;
+    computeSignatureHelp(content: string, position: Position, tree?: TreeParser.Tree): SignatureHelp;
 
-    computeLinks(content: string): DocumentLink[];
+    computeRename(textDocument: TextDocumentIdentifier, content: string, position: Position, newName: string, tree?: TreeParser.Tree): WorkspaceEdit | null;
+
+    prepareRename(textDocument: TextDocumentIdentifier, content: string, position: Position, tree?: TreeParser.Tree): Range | null;
+
+    computeLinks(uri: string): DocumentLink[];
 
     resolveLink(link: DocumentLink): DocumentLink;
 
     /**
      * Experimental API subject to change.
      */
-    computeSemanticTokens(content: string): SemanticTokens;
+    computeSemanticTokens(content: string, uri?: string, tree?: TreeParser.Tree): SemanticTokens;
 
-    validate(content: string, parser: TreeParser,  settings?: ValidatorSettings): [TextDocumentIdentifier[], Diagnostic[]];
+    computeSemanticTokensDelta(content: string, previousResultId: string | undefined, uri: string, tree?: TreeParser.Tree): SemanticTokens;
 
-    //format(content: string, settings: FormatterSettings): TextEdit[];
+    clearSemanticTokensDelta(uri: string): void;
 
-    //formatRange(content: string, range: Range, settings: FormatterSettings): TextEdit[];
+    computeInlayHints(content: string, range: Range, tree?: TreeParser.Tree): InlayHint[];
 
-    //formatOnType(content: string, position: Position, ch: string, settings: FormatterSettings): TextEdit[];
+    validate(content: string, parser: TreeParser,  settings?: ValidatorSettings, tree?: TreeParser.Tree): [TextDocumentIdentifier[], Diagnostic[]];
+
+    validateWithSolver(uri: string, content: string, settings?: ValidatorSettings): Promise<[TextDocumentIdentifier[], Diagnostic[]]>;
+
+    /**
+     * Opts into the active banana trick (off by default). solverRunner is
+     * test-only injection point for the solver process layer.
+     */
+    setBananaTrick(enabled: boolean, solverRunner?: SolverRunner): void;
 
     setLogger(logger: ILogger): void;
     setTreeParser(): Promise<void>;
     getTreeParser(): TreeParser;
+    initializeWorkspace(rootUri: string): void;
+    getWorkspaceIndex(): import('./foamWorkspaceIndex').FoamWorkspaceIndex | null;
 }

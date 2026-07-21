@@ -29,8 +29,8 @@ export class FoamSignatures {
         this.hover = new FoamHover(null, this.documentation, this.treeParser);
     }
 
-    public computeSignatures(content: string, position: Position): SignatureHelp {
-        const signatureLabel = this.hover.getNodeUnderCursor(content, position).text;
+    public computeSignatures(content: string, position: Position, parsedTree?: TreeParser.Tree): SignatureHelp {
+        const signatureLabel = this.hover.getNodeUnderCursor(content, position, parsedTree).text;
         let signatureDoc: string = this.documentation.getSignatureHelp("signature_"+signatureLabel);
         let signatureParamDoc: string = this.documentation.getSignatureHelp("signature_param_"+signatureLabel);
         return {

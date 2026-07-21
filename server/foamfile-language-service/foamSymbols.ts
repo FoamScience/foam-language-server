@@ -189,10 +189,10 @@ export class FoamSymbols {
     }
 
     // Returns all symbols from a document (breaching lists)
-    public parseSymbolInformation(textDocument: TextDocumentIdentifier, content: string): SymbolInformation[] {
+    public parseSymbolInformation(textDocument: TextDocumentIdentifier, content: string, parsedTree?: TreeParser.Tree): SymbolInformation[] {
 
         let symbols: SymbolInformation[] = [];
-        const tree = this.treeParser.parse(content);
+        const tree = parsedTree ?? this.treeParser.parse(content);
         for (let entry of this.traverseSymbolTree(tree, textDocument, false)) {
             symbols.push( entry );
         }

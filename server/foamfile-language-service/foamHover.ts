@@ -30,10 +30,10 @@ export class FoamHover {
     }
 
     // Returns the node at current position
-    public getNodeUnderCursor(content: string, position: Position) {
+    public getNodeUnderCursor(content: string, position: Position, parsedTree?: TreeParser.Tree) {
         let document : TextDocument = TextDocument.create("", "foam", 0, content);
         let offset = document.offsetAt(position)
-        const tree = this.treeParser.parse(content);
+        const tree = parsedTree ?? this.treeParser.parse(content);
 
         // Start from root
         let root = tree.rootNode;
@@ -59,9 +59,9 @@ export class FoamHover {
     }
 
     // What happens the hover event is triggered
-    public onHover(content: string, position: Position, markupKind: MarkupKind[]): Hover | null {
+    public onHover(content: string, position: Position, markupKind: MarkupKind[], parsedTree?: TreeParser.Tree): Hover | null {
 
-        const key = this.getNodeUnderCursor(content, position).text;
+        const key = this.getNodeUnderCursor(content, position, parsedTree).text;
         if (key) {
             // if it's not a raw value, fetch documenation
             if (markupKind && markupKind.length > 0) {

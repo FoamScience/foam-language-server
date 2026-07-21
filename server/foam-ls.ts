@@ -7,29 +7,29 @@
 import * as fs from "fs";
 import {
 	createConnection, InitializeParams, InitializeResult, ClientCapabilities,
-	TextDocumentPositionParams, TextDocumentSyncKind, TextDocument, DocumentUri, TextEdit, Hover,
+	TextDocuments,
+	TextDocumentPositionParams, TextDocumentSyncKind, DocumentUri, TextEdit, Hover,
 	CompletionItem, CodeActionParams, Command, ExecuteCommandParams,
 	DocumentSymbolParams, WorkspaceSymbolParams, SymbolInformation, SignatureHelp,
-	DocumentFormattingParams, DocumentRangeFormattingParams, DocumentOnTypeFormattingParams, DocumentHighlight,
+	DocumentHighlight,
 	RenameParams, Range, WorkspaceEdit, Location,
 	DidChangeTextDocumentParams, DidOpenTextDocumentParams, DidCloseTextDocumentParams, TextDocumentContentChangeEvent,
 	DidChangeConfigurationNotification, ConfigurationItem, DocumentLinkParams, DocumentLink, MarkupKind,
 	VersionedTextDocumentIdentifier, TextDocumentEdit, CodeAction, CodeActionKind, ProposedFeatures,
-	FoldingRangeParams, SemanticTokenModifiers, SemanticTokenTypes, SemanticTokensParams
+	FoldingRangeParams, SemanticTokenModifiers, SemanticTokenTypes, SemanticTokensParams,
+	Diagnostic, DocumentDiagnosticReportKind, TextDocumentIdentifier,
+	DidChangeWatchedFilesNotification, FileChangeType, InlayHintParams
 } from 'vscode-languageserver/node';
 import { uriToFilePath } from 'vscode-languageserver/lib/node/files';
+import { TextDocument } from 'vscode-languageserver-textdocument';
+import { DocumentCache } from './foamfile-language-service/documentCache';
+import { SyntaxValidator } from './foamfile-utils/syntaxValidator';
 import { ValidatorSettings, ValidationSeverity } from './foamfile-utils/main';
-import { CommandIds, FoamLanguageServiceFactory, FormatterSettings } from './foamfile-language-service/main';
-
-// Default configuration for formatter
-let formatterConfiguration: FormatterConfiguration | null = null;
+import { CommandIds, FoamLanguageServiceFactory } from './foamfile-language-service/main';
 
 // The settings to use for the validator if the client doesn't support
 // workspace/configuration requests.
 let validatorSettings: ValidatorSettings | null = null;
-
-// Default Mapping configuration-formatters
-const formatterConfigurations: Map<string, Thenable<FormatterConfiguration>> = new Map();
 
 // Validator params for an individual file retrieved via the workspace/configuration request.
 let validatorConfigurations: Map<string, Thenable<ValidatorConfiguration>> = new Map();
@@ -57,8 +57,52 @@ let documentChangesSupport: boolean = false;
 // Whether the client supports the quickFix request.
 let codeActionQuickFixSupport: boolean = false;
 
-// List of documents in workspace
-let documents: { [ uri: string ]: TextDocument } = {};
+// Whether the client supports LSP 3.17 pull diagnostics
+// (when it does, diagnostics are served on request instead of pushed)
+let pullDiagnosticsSupport: boolean = false;
+
+// Whether the client supports dynamic registration of file watchers
+let watchedFilesSupport: boolean = false;
+
+// Layered diagnostics per uri: instant tree-sitter syntax errors
+// and solver-derived semantic errors, published merged
+const syntaxValidator = new SyntaxValidator();
+const diagnosticsState: Map<string, { syntax: Diagnostic[], solver: Diagnostic[] }> = new Map();
+
+function diagnosticsFor(uri: string): { syntax: Diagnostic[], solver: Diagnostic[] } {
+	let state = diagnosticsState.get(uri);
+	if (!state) {
+		state = { syntax: [], solver: [] };
+		diagnosticsState.set(uri, state);
+	}
+	return state;
+}
+
+function mergedDiagnostics(uri: string): Diagnostic[] {
+	const state = diagnosticsState.get(uri);
+	return state ? state.syntax.concat(state.solver) : [];
+}
+
+function publishDiagnostics(uri: string): void {
+	if (!pullDiagnosticsSupport) {
+		connection.sendDiagnostics({ uri, diagnostics: mergedDiagnostics(uri) });
+	}
+}
+
+// Per-document tree-sitter tree cache, created once the parser is ready
+let documentCache: DocumentCache | null = null;
+
+// Open documents, synced by the TextDocuments manager; tree.edit() bookkeeping
+// happens in the update callback, against the pre-change document state
+let documents = new TextDocuments<TextDocument>({
+	create: (uri, languageId, version, content) => TextDocument.create(uri, languageId, version, content),
+	update: (document, changes, version) => {
+		if (documentCache) {
+			documentCache.applyEdits(document, changes);
+		}
+		return TextDocument.update(document, changes, version);
+	}
+});
 
 // Default project root, this must point to the OpenFOAM case
 // This has to be the first "workspace folder"
@@ -66,8 +110,9 @@ let rootUri: DocumentUri | null = null;
 
 // Retrieves a text document for the file located at the given URI string.
 function getDocument(uri: string): PromiseLike<TextDocument> {
-	if (documents[uri]) {
-		return Promise.resolve(documents[uri]);
+	const open = documents.get(uri);
+	if (open) {
+		return Promise.resolve(open);
 	}
 	return new Promise((resolve, _) => {
 		let file = uriToFilePath(uri);
@@ -85,6 +130,11 @@ function getDocument(uri: string): PromiseLike<TextDocument> {
 			});
 		}
 	});
+}
+
+// Cached tree for a document (fresh parse for unopened files)
+function getTree(document: TextDocument) {
+	return documentCache ? documentCache.getTree(document.uri, document.getText()) : undefined;
 }
 
 function supportsDeprecatedItems(capabilities: ClientCapabilities): boolean {
@@ -173,52 +223,76 @@ connection.onInitialized(() => {
 	if (configurationSupport) {
 		// listen for notification changes if the client supports workspace/configuration
 		connection.client.register(DidChangeConfigurationNotification.type);
+		refreshCompletionConfiguration();
+	}
+	// index the whole case once the handshake is done
+	if (rootUri) {
+		setImmediate(() => service.initializeWorkspace(rootUri));
+	}
+	if (watchedFilesSupport) {
+		connection.client.register(DidChangeWatchedFilesNotification.type, {
+			watchers: [
+				{ globPattern: '**/system/**' },
+				{ globPattern: '**/constant/**' },
+				{ globPattern: '**/0*/**' },
+			]
+		});
+	}
+});
+
+connection.onDidChangeWatchedFiles((params) => {
+	const index = service.getWorkspaceIndex();
+	if (!index) {
+		return;
+	}
+	for (const change of params.changes) {
+		if (change.type === FileChangeType.Deleted) {
+			index.remove(change.uri);
+		} else {
+			index.reindexUri(change.uri);
+		}
 	}
 });
 
 connection.onInitialize(async (params: InitializeParams): Promise<InitializeResult> => {
         await service.setTreeParser();
+        documentCache = new DocumentCache(service.getTreeParser());
 	    setServiceCapabilities(params.capabilities);
 	    applyEditSupport = params.capabilities.workspace && params.capabilities.workspace.applyEdit === true;
 	    documentChangesSupport = params.capabilities.workspace && params.capabilities.workspace.workspaceEdit && params.capabilities.workspace.workspaceEdit.documentChanges === true;
 	    configurationSupport = params.capabilities.workspace && params.capabilities.workspace.configuration === true;
 	    const renamePrepareSupport = params.capabilities.textDocument && params.capabilities.textDocument.rename && params.capabilities.textDocument.rename.prepareSupport === true;
 	    const semanticTokensSupport = params.capabilities.textDocument && (params.capabilities.textDocument as any).semanticTokens;
+	    const inlayHintSupport = !!(params.capabilities.textDocument?.inlayHint);
+	    pullDiagnosticsSupport = !!(params.capabilities.textDocument && (params.capabilities.textDocument as any).diagnostic);
+	    watchedFilesSupport = params.capabilities.workspace && params.capabilities.workspace.didChangeWatchedFiles && params.capabilities.workspace.didChangeWatchedFiles.dynamicRegistration === true;
 	    codeActionQuickFixSupport = supportsCodeActionQuickFixes(params.capabilities);
-        rootUri = params.workspaceFolders[0].uri;
+        rootUri = params.workspaceFolders?.[0]?.uri ?? params.rootUri ?? null;
 	    return {
 	    	capabilities: {
 	    		textDocumentSync: TextDocumentSyncKind.Incremental,
+	    		diagnosticProvider: pullDiagnosticsSupport ? {
+	    			interFileDependencies: true,
+	    			workspaceDiagnostics: true
+	    		} : undefined,
 	    		codeActionProvider: applyEditSupport,
-				// Turn off completion provider as no real value is added
-				// by just "macro" completion
-				completionProvider: false,
-	    		//completionProvider: {
-	    		//	resolveProvider: true,
-	    		//	triggerCharacters: [
-	    		//		'=',
-	    		//		' ',
-	    		//		'$',
-	    		//		'#',
-	    		//		'-',
-	    		//	]
-	    		//},
+	    		completionProvider: {
+	    			resolveProvider: true,
+	    			triggerCharacters: [
+	    				'$',
+	    				'#',
+	    			]
+	    		},
 	    		executeCommandProvider: applyEditSupport ? {
 	    			commands: [
 	    				CommandIds.FATAL_ERROR,
 	    				CommandIds.FATAL_IO_ERROR,
 	    			]
 	    		} : undefined,
-	    		documentFormattingProvider: false,
-	    		documentRangeFormattingProvider: false,
-	    		documentOnTypeFormattingProvider: false,
-	    		//documentOnTypeFormattingProvider: {
-	    		//	firstTriggerCharacter: '\\',
-	    		//	moreTriggerCharacter: [ '`' ]
-	    		//},
 	    		hoverProvider: true,
 	    		documentSymbolProvider: true,
 	    		documentHighlightProvider: true,
+	    		referencesProvider: true,
 	    		renameProvider: renamePrepareSupport ? {
 	    			prepareProvider: true
 	    		} : true,
@@ -239,7 +313,7 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
 	    		},
 	    		semanticTokensProvider: semanticTokensSupport ? {
 	    			full: {
-	    				delta: false
+	    				delta: true
 	    			},
 	    			legend: {
 	    				tokenTypes: [
@@ -262,6 +336,8 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
 	    			}
 	    		} : undefined,
 	    		foldingRangeProvider: true,
+	    		selectionRangeProvider: true,
+	    		inlayHintProvider: inlayHintSupport ? true : undefined,
                 workspaceSymbolProvider: true,
                 workspace: {
                     workspaceFolders: {
@@ -286,25 +362,61 @@ function convertValidatorConfiguration(config: ValidatorConfiguration): Validato
 	};
 }
 
-function validateTextDocument(textDocument: TextDocument): void {
-	if (configurationSupport) {
-		getValidatorConfiguration(textDocument.uri).then((config: ValidatorConfiguration) => {
-			const fileSettings = convertValidatorConfiguration(config);
-			const [uris, diagnostics] = service.validate(textDocument.getText(), service.getTreeParser(), fileSettings);
-            if (uris.length > 0) {
-			    connection.sendDiagnostics({ uri: uris[0].uri, diagnostics });
-            }
-		});
-	} else {
-		const [uris, diagnostics] = service.validate(textDocument.getText(), service.getTreeParser(), validatorSettings);
-        if (uris.length > 0) {
-		    connection.sendDiagnostics({ uri: uris[0].uri, diagnostics });
-        }
+// Solver runs are debounced per document and their results discarded
+// when the document changed while the solver was running
+const solverTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+// solver diagnostics can land on other files; remember them to clear stale ones
+let lastSolverTargets: Set<string> = new Set();
+
+async function runSolverValidation(uri: string): Promise<void> {
+	const document = documents.get(uri);
+	if (!document) {
+		return;
+	}
+	const version = document.version;
+	const settings = configurationSupport
+		? convertValidatorConfiguration(await getValidatorConfiguration(uri))
+		: (validatorSettings ?? convertValidatorConfiguration(null));
+	const [uris, diagnostics] = await service.validateWithSolver(uri, document.getText(), settings);
+	if (documents.get(uri)?.version !== version) {
+		// stale result, a newer run is scheduled
+		return;
+	}
+	const byUri: Map<string, Diagnostic[]> = new Map();
+	uris.forEach((id, i) => {
+		const target = byUri.get(id.uri) ?? [];
+		target.push(diagnostics[i]);
+		byUri.set(id.uri, target);
+	});
+	// clear solver slices that no longer have errors
+	for (const target of lastSolverTargets) {
+		if (!byUri.has(target)) {
+			byUri.set(target, []);
+		}
+	}
+	if (!byUri.has(uri)) {
+		byUri.set(uri, []);
+	}
+	lastSolverTargets = new Set([...byUri.keys()].filter(u => byUri.get(u).length > 0));
+	for (const [target, diags] of byUri) {
+		diagnosticsFor(target).solver = diags;
+		publishDiagnostics(target);
+	}
+	if (pullDiagnosticsSupport) {
+		connection.languages.diagnostics.refresh();
 	}
 }
 
-interface FormatterConfiguration {
-	ignoreMultilineInstructions?: boolean;
+function validateTextDocument(textDocument: TextDocument): void {
+	const uri = textDocument.uri;
+	const pending = solverTimers.get(uri);
+	if (pending) {
+		clearTimeout(pending);
+	}
+	solverTimers.set(uri, setTimeout(() => {
+		solverTimers.delete(uri);
+		runSolverValidation(uri);
+	}, 1000));
 }
 
 interface ValidatorConfiguration {
@@ -312,12 +424,28 @@ interface ValidatorConfiguration {
 	fatalIOError?: string,
 }
 
+interface CompletionConfiguration {
+	// active banana trick: opt-in, off by default (see foamBananaTrick.ts)
+	bananaTrick?: boolean,
+}
+
 interface Settings {
 	foam: {
 		languageserver: {
 			diagnostics?: ValidatorConfiguration,
-			formatter?: FormatterConfiguration
+			completion?: CompletionConfiguration
 		}
+	}
+}
+
+function applyCompletionConfiguration(config: CompletionConfiguration | null | undefined): void {
+	service.setBananaTrick(!!(config && config.bananaTrick));
+}
+
+function refreshCompletionConfiguration(): void {
+	if (configurationSupport) {
+		connection.workspace.getConfiguration({ section: "foam.languageserver.completion" })
+			.then((config: CompletionConfiguration) => applyCompletionConfiguration(config));
 	}
 }
 
@@ -350,28 +478,10 @@ connection.onNotification(DidChangeConfigurationNotification.type, () => {
 function getConfigurationItems(sectionName): ConfigurationItem[] {
 	// store all the URIs that need to be refreshed
 	const configurationItems: ConfigurationItem[] = [];
-	for (const uri in documents) {
+	for (const uri of documents.keys()) {
 		configurationItems.push({ section: sectionName, scopeUri: uri });
 	}
 	return configurationItems;
-}
-
-function refreshFormatterConfigurations() {
-	// store all the URIs that need to be refreshed
-	const settingsRequest = getConfigurationItems("foam.languageserver.formatter");
-	// clear the cache
-	formatterConfigurations.clear();
-
-	// ask the workspace for the configurations
-	connection.workspace.getConfiguration(settingsRequest).then((settings: FormatterConfiguration[]) => {
-		for (let i = 0; i < settings.length; i++) {
-			const resource = settingsRequest[i].scopeUri;
-			// a value might have been stored already, use it instead and ignore this one if so
-			if (settings[i] && !formatterConfigurations.has(resource)) {
-				formatterConfigurations.set(resource, Promise.resolve(settings[i]));
-			}
-		}
-	});
 }
 
 function refreshValidatorConfigurations() {
@@ -392,15 +502,18 @@ function refreshValidatorConfigurations() {
 		}
 
 		for (const resource of toRevalidate) {
-			validateTextDocument(documents[resource]);
+			const document = documents.get(resource);
+			if (document) {
+				validateTextDocument(document);
+			}
 		}
 	});
 }
 
 // Wipes and reloads the internal cache of configurations.
 function refreshConfigurations() {
-	refreshFormatterConfigurations();
 	refreshValidatorConfigurations();
+	refreshCompletionConfiguration();
 }
 
 connection.onDidChangeConfiguration((change) => {
@@ -412,24 +525,22 @@ connection.onDidChangeConfiguration((change) => {
 			if (settings.foam.languageserver.diagnostics) {
 				validatorSettings = convertValidatorConfiguration(settings.foam.languageserver.diagnostics);
 			}
-			if (settings.foam.languageserver.formatter) {
-				formatterConfiguration = settings.foam.languageserver.formatter;
-			}
+			applyCompletionConfiguration(settings.foam.languageserver.completion);
 		} else {
-			formatterConfiguration = null;
 			validatorSettings = convertValidatorConfiguration(null);
+			applyCompletionConfiguration(null);
 		}
 		// validate all the documents again
-		Object.keys(documents).forEach((key) => {
-			validateTextDocument(documents[key]);
-		});
+		for (const document of documents.all()) {
+			validateTextDocument(document);
+		}
 	}
 });
 
 connection.onCompletion((textDocumentPosition: TextDocumentPositionParams): PromiseLike<CompletionItem[]> => {
 	return getDocument(textDocumentPosition.textDocument.uri).then((document) => {
 		if (document) {
-			return service.computeCompletionItems(document.getText(), textDocumentPosition.position);
+			return service.computeCompletionItems(document.getText(), textDocumentPosition.position, getTree(document), document.uri);
 		}
 		return null;
 	});
@@ -438,7 +549,7 @@ connection.onCompletion((textDocumentPosition: TextDocumentPositionParams): Prom
 connection.onSignatureHelp((textDocumentPosition: TextDocumentPositionParams): PromiseLike<SignatureHelp> => {
 	return getDocument(textDocumentPosition.textDocument.uri).then((document) => {
 		if (document !== null) {
-			return service.computeSignatureHelp(document.getText(), textDocumentPosition.position);
+			return service.computeSignatureHelp(document.getText(), textDocumentPosition.position, getTree(document));
 		}
 		return {
 			signatures: [],
@@ -455,7 +566,7 @@ connection.onCompletionResolve((item: CompletionItem): CompletionItem => {
 connection.onHover((textDocumentPosition: TextDocumentPositionParams): PromiseLike<Hover> => {
 	return getDocument(textDocumentPosition.textDocument.uri).then((document) => {
 		if (document) {
-			return service.computeHover(document.getText(), textDocumentPosition.position);
+			return service.computeHover(document.getText(), textDocumentPosition.position, getTree(document));
 		}
 		return null;
 	});
@@ -464,7 +575,16 @@ connection.onHover((textDocumentPosition: TextDocumentPositionParams): PromiseLi
 connection.onDocumentHighlight((textDocumentPosition: TextDocumentPositionParams): PromiseLike<DocumentHighlight[]> => {
 	return getDocument(textDocumentPosition.textDocument.uri).then((document) => {
 		if (document) {
-			return service.computeHighlightRanges(document.getText(), textDocumentPosition.position);
+			return service.computeHighlightRanges(textDocumentPosition.textDocument, document.getText(), textDocumentPosition.position, getTree(document));
+		}
+		return [];
+	});
+});
+
+connection.onReferences((referenceParams): PromiseLike<Location[]> => {
+	return getDocument(referenceParams.textDocument.uri).then((document) => {
+		if (document) {
+			return service.computeReferences(referenceParams.textDocument, document.getText(), referenceParams.position, getTree(document));
 		}
 		return [];
 	});
@@ -534,7 +654,7 @@ connection.onExecuteCommand((params: ExecuteCommandParams): void => {
 connection.onDefinition((textDocumentPosition: TextDocumentPositionParams): PromiseLike<Location> => {
 	return getDocument(textDocumentPosition.textDocument.uri).then((document) => {
 		if (document) {
-			return service.computeDefinition(textDocumentPosition.textDocument, document.getText(), textDocumentPosition.position);
+			return service.computeDefinition(textDocumentPosition.textDocument, document.getText(), textDocumentPosition.position, getTree(document));
 		}
 		return null;
 	});
@@ -543,12 +663,8 @@ connection.onDefinition((textDocumentPosition: TextDocumentPositionParams): Prom
 connection.onRenameRequest((params: RenameParams): PromiseLike<WorkspaceEdit> => {
 	return getDocument(params.textDocument.uri).then((document) => {
 		if (document) {
-			let edits = service.computeRename(params.textDocument, document.getText(), params.position, params.newName);
-			return {
-				changes: {
-					[ params.textDocument.uri ]: edits
-				}
-			};
+			// the service builds a full cross-file WorkspaceEdit
+			return service.computeRename(params.textDocument, document.getText(), params.position, params.newName, getTree(document));
 		}
 		return null;
 	});
@@ -557,7 +673,7 @@ connection.onRenameRequest((params: RenameParams): PromiseLike<WorkspaceEdit> =>
 connection.onPrepareRename((params: TextDocumentPositionParams): PromiseLike<Range> => {
 	return getDocument(params.textDocument.uri).then((document) => {
 		if (document) {
-			return service.prepareRename(document.getText(), params.position);
+			return service.prepareRename(params.textDocument, document.getText(), params.position, getTree(document));
 		}
 		return null;
 	});
@@ -566,95 +682,35 @@ connection.onPrepareRename((params: TextDocumentPositionParams): PromiseLike<Ran
 connection.onDocumentSymbol((documentSymbolParams: DocumentSymbolParams): PromiseLike<SymbolInformation[]> => {
 	return getDocument(documentSymbolParams.textDocument.uri).then((document) => {
 		if (document) {
-			return service.computeSymbols(documentSymbolParams.textDocument, document.getText());
+			return service.computeSymbols(documentSymbolParams.textDocument, document.getText(), getTree(document));
 		}
 		return [];
 	});
 });
 
 connection.onWorkspaceSymbol((workspaceSymbolParams: WorkspaceSymbolParams): PromiseLike<SymbolInformation[]> => {
+    // the index covers the whole case and mirrors open-document edits
+    const index = service.getWorkspaceIndex();
+    if (index) {
+        const query = (workspaceSymbolParams.query ?? "").toLowerCase();
+        const all = index.allSymbols();
+        return Promise.resolve(
+            query === "" ? all : all.filter(s => s.name.toLowerCase().includes(query)));
+    }
     var wSymbols : SymbolInformation[] = [];
-	for (const uri in documents) {
-        for (const sym of service.computeSymbols(documents[uri], documents[uri].getText())) {
+	for (const document of documents.all()) {
+        const tree = documentCache ? documentCache.getTree(document.uri, document.getText()) : undefined;
+        for (const sym of service.computeSymbols(document, document.getText(), tree)) {
             wSymbols.push(sym);
         }
 	}
-    //return wSymbols;
-    return new Promise((resolve) => {
-        resolve(wSymbols);
-    });
+    return Promise.resolve(wSymbols);
 })
-
-connection.onDocumentFormatting((documentFormattingParams: DocumentFormattingParams): PromiseLike<TextEdit[]> => {
-	return getDocument(documentFormattingParams.textDocument.uri).then((document) => {
-		//if (configurationSupport) {
-		//	return getFormatterConfiguration(document.uri).then((configuration: FormatterConfiguration) => {
-		//		if (document) {
-		//			const options: FormatterSettings = documentFormattingParams.options;
-		//			options.ignoreMultilineInstructions = configuration !== null && configuration.ignoreMultilineInstructions;
-		//			return service.format(document.getText(), options);
-		//		}
-		//		return [];
-		//	});
-		//}
-
-		//if (document) {
-		//	const options: FormatterSettings = documentFormattingParams.options;
-		//	options.ignoreMultilineInstructions = formatterConfiguration !== null && formatterConfiguration.ignoreMultilineInstructions;
-		//	return service.format(document.getText(), options);
-		//}
-		return [];
-	});
-});	
-
-connection.onDocumentRangeFormatting((rangeFormattingParams: DocumentRangeFormattingParams): PromiseLike<TextEdit[]> => {
-	return getDocument(rangeFormattingParams.textDocument.uri).then((document) => {
-		//if (configurationSupport) {
-		//	return getFormatterConfiguration(document.uri).then((configuration: FormatterConfiguration) => {
-		//		if (document) {
-		//			const options: FormatterSettings = rangeFormattingParams.options;
-		//			options.ignoreMultilineInstructions = configuration !== null && configuration.ignoreMultilineInstructions;
-		//			return service.formatRange(document.getText(),rangeFormattingParams.range, options);
-		//		}
-		//		return [];
-		//	});
-		//}
-
-		//if (document) {
-		//	const options: FormatterSettings = rangeFormattingParams.options;
-		//	options.ignoreMultilineInstructions = formatterConfiguration !== null && formatterConfiguration.ignoreMultilineInstructions;
-		//	return service.formatRange(document.getText(), rangeFormattingParams.range, rangeFormattingParams.options);
-		//}
-		return [];
-	});
-});
-
-connection.onDocumentOnTypeFormatting((onTypeFormattingParams: DocumentOnTypeFormattingParams): PromiseLike<TextEdit[]> => {
-	return getDocument(onTypeFormattingParams.textDocument.uri).then((document) => {
-		//if (configurationSupport) {
-		//	return getFormatterConfiguration(document.uri).then((configuration: FormatterConfiguration) => {
-		//		if (document) {
-		//			const options: FormatterSettings = onTypeFormattingParams.options;
-		//			options.ignoreMultilineInstructions = configuration !== null && configuration.ignoreMultilineInstructions;
-		//			return service.formatOnType(document.getText(), onTypeFormattingParams.position, onTypeFormattingParams.ch, options);
-		//		}
-		//		return [];
-		//	});
-		//}
-
-		//if (document) {
-		//	const options: FormatterSettings = onTypeFormattingParams.options;
-		//	options.ignoreMultilineInstructions = formatterConfiguration !== null && formatterConfiguration.ignoreMultilineInstructions;
-		//	return service.formatOnType(document.getText(), onTypeFormattingParams.position, onTypeFormattingParams.ch, onTypeFormattingParams.options);
-		//}
-		return [];
-	});
-});
 
 connection.onDocumentLinks((documentLinkParams: DocumentLinkParams): PromiseLike<DocumentLink[]> => {
 	return getDocument(documentLinkParams.textDocument.uri).then((document) => {
 		if (document) {
-			return service.computeLinks(document.getText());
+			return service.computeLinks(document.uri);
 		}
 		return [];
 	});
@@ -667,22 +723,73 @@ connection.onDocumentLinkResolve((documentLink: DocumentLink): DocumentLink => {
 connection.onFoldingRanges((foldingRangeParams: FoldingRangeParams) => {
 	return getDocument(foldingRangeParams.textDocument.uri).then((document) => {
 		if (document) {
-			return service.computeFoldingRanges(document.getText());
+			return service.computeFoldingRanges(document.getText(), getTree(document));
 		}
 		return [];
 	});
 });
 
-connection.onDidOpenTextDocument((didOpenTextDocumentParams: DidOpenTextDocumentParams): void => {
-	let document = TextDocument.create(didOpenTextDocumentParams.textDocument.uri, didOpenTextDocumentParams.textDocument.languageId, didOpenTextDocumentParams.textDocument.version, didOpenTextDocumentParams.textDocument.text);
-	documents[didOpenTextDocumentParams.textDocument.uri] = document;
-	validateTextDocument(document);
+connection.onSelectionRanges((selectionRangeParams) => {
+	return getDocument(selectionRangeParams.textDocument.uri).then((document) => {
+		if (document) {
+			return service.computeSelectionRanges(document.getText(), selectionRangeParams.positions, getTree(document));
+		}
+		return [];
+	});
+});
+
+// Fires on open and on every content change; the tree cache was already
+// primed with tree.edit()s in the TextDocuments update callback
+documents.onDidChangeContent((event) => {
+	if (documentCache) {
+		const tree = documentCache.refresh(event.document);
+		diagnosticsFor(event.document.uri).syntax = syntaxValidator.validate(tree);
+		publishDiagnostics(event.document.uri);
+		// keep cross-file features aware of unsaved edits
+		service.getWorkspaceIndex()?.refreshFromDocument(event.document.uri, event.document.getText(), tree);
+	}
+	validateTextDocument(event.document);
+});
+
+documents.onDidClose((event) => {
+	if (documentCache) {
+		documentCache.evict(event.document.uri);
+	}
+	const pending = solverTimers.get(event.document.uri);
+	if (pending) {
+		clearTimeout(pending);
+		solverTimers.delete(event.document.uri);
+	}
+	validatorConfigurations.delete(event.document.uri);
+	diagnosticsState.delete(event.document.uri);
+	service.clearSemanticTokensDelta(event.document.uri);
+	connection.sendDiagnostics({ uri: event.document.uri, diagnostics: [] });
+});
+
+// LSP 3.17 pull diagnostics; only ever requested by clients we advertised
+// the diagnosticProvider capability to
+connection.languages.diagnostics.on(async (params) => {
+	return {
+		kind: DocumentDiagnosticReportKind.Full,
+		items: mergedDiagnostics(params.textDocument.uri)
+	};
+});
+
+connection.languages.diagnostics.onWorkspace(async () => {
+	return {
+		items: Array.from(diagnosticsState.keys(), (uri) => ({
+			kind: DocumentDiagnosticReportKind.Full,
+			uri,
+			version: documents.get(uri)?.version ?? null,
+			items: mergedDiagnostics(uri)
+		}))
+	};
 });
 
 connection.languages.semanticTokens.on((semanticTokenParams: SemanticTokensParams) => {
 	return getDocument(semanticTokenParams.textDocument.uri).then((document) => {
 		if (document) {
-			return service.computeSemanticTokens(document.getText());
+			return service.computeSemanticTokens(document.getText(), semanticTokenParams.textDocument.uri, getTree(document));
 		}
 		return {
 			data: []
@@ -690,55 +797,26 @@ connection.languages.semanticTokens.on((semanticTokenParams: SemanticTokensParam
 	});
 });
 
-connection.onDidChangeTextDocument((didChangeTextDocumentParams: DidChangeTextDocumentParams): void => {
-    // TODO: Refreshing configuration may not be necessary on every document change
-	if (configurationSupport) {
-		refreshConfigurations();
-	}
-	let document = documents[didChangeTextDocumentParams.textDocument.uri];
-	let buffer = document.getText();
-	let content = buffer;
-	let changes = didChangeTextDocumentParams.contentChanges;
-	for (let i = 0; i < changes.length; i++) {
-		const change = changes[i] as any;
-		if (!change.range && !change.rangeLength) {
-			// no ranges defined, the text is the entire document then
-			buffer = change.text;
-			document = TextDocument.create(
-				didChangeTextDocumentParams.textDocument.uri,
-				document.languageId,
-				didChangeTextDocumentParams.textDocument.version,
-				buffer
-			);
-			break;
+connection.languages.semanticTokens.onDelta((deltaParams: any) => {
+	return getDocument(deltaParams.textDocument.uri).then((document) => {
+		if (document) {
+			return service.computeSemanticTokensDelta(document.getText(), deltaParams.previousResultId, deltaParams.textDocument.uri, getTree(document));
 		}
-
-		let offset = document.offsetAt(change.range.start);
-		let end = null;
-		if (change.range.end) {
-			end = document.offsetAt(change.range.end);
-		} else {
-			end = offset + change.rangeLength;
+		return {
+			data: []
 		}
-		buffer = buffer.substring(0, offset) + change.text + buffer.substring(end);
-		document = TextDocument.create(
-			didChangeTextDocumentParams.textDocument.uri,
-			document.languageId,
-			didChangeTextDocumentParams.textDocument.version,
-			buffer
-		);
-	}
-	documents[didChangeTextDocumentParams.textDocument.uri] = document;
-	if (content !== buffer) {
-		validateTextDocument(document);
-	}
+	});
 });
 
-connection.onDidCloseTextDocument((didCloseTextDocumentParams: DidCloseTextDocumentParams): void => {
-	validatorConfigurations.delete(didCloseTextDocumentParams.textDocument.uri);
-	connection.sendDiagnostics({ uri: didCloseTextDocumentParams.textDocument.uri, diagnostics: [] });
-	delete documents[didCloseTextDocumentParams.textDocument.uri];
+connection.languages.inlayHint.on((inlayHintParams: InlayHintParams) => {
+	return getDocument(inlayHintParams.textDocument.uri).then((document) => {
+		if (document) {
+			return service.computeInlayHints(document.getText(), inlayHintParams.range, getTree(document));
+		}
+		return [];
+	});
 });
 
 // setup is complete, start listening for client connections
+documents.listen(connection);
 connection.listen();
