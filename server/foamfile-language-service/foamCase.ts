@@ -21,15 +21,18 @@
                                             recognized by dict-ancestry, not position)
     - system/topoSetDict,                   patch X; (sourceInfo or inline) and
       system|constant/fvOptions             patches (...) lists, anywhere in the dict
-    ponytail: skipped for now — snappyHexMeshDict castellatedMeshControls/
-    refinementSurfaces/<surface> keys are geometry-derived (STL surface names,
-    not patch names) and are intentionally never scanned as patch sites: this
-    file's rename and find-references both feed off findPatchSites/isPatchSiteNode,
-    so any site recognized there becomes a rename edit — there is no "reference
-    only" tier to opt into without a caller that would use it. Upgrade path:
-    split PatchSite into edit-sites vs. display-only sites if a consumer needs
-    to list these separately. Also still skipped: topoSetDict/fvOptions region-
-    based (non-patch) sources.
+    - system/snappyHexMeshDict              castellatedMeshControls/refinementSurfaces/
+                                            <surface> keys, display-only (PatchSite.
+                                            displayOnly): the CHT/snappy convention
+                                            where a surface shares its name with a
+                                            patch, so references/hover/highlight see
+                                            it but rename never edits it (surface
+                                            names are geometry-derived, not the
+                                            patch itself). Only emitted when the key
+                                            text is an already-known patch name;
+                                            geometry-only surface names (e.g. "hull")
+                                            are never scanned as patch sites at all.
+    Still skipped: topoSetDict/fvOptions region-based (non-patch) sources.
 
     Multi-region cases: patch names are scoped per mesh region. The region of
     the file a rename/reference starts in (index.regionOf) is captured during
@@ -52,6 +55,8 @@ export interface PatchSite {
     role: PatchSiteRole;
     // set when the site is a member inside a quoted alternation key like "(front|back)"
     quoted?: boolean;
+    // set for read-only sites (references/hover/highlight see them; rename skips them)
+    displayOnly?: boolean;
 }
 
 export interface SymbolTarget {
@@ -326,6 +331,39 @@ export class FoamCase {
         }
     }
 
+    // snappyHexMeshDict castellatedMeshControls/refinementSurfaces/<surface>
+    // keys, display-only: only yielded when the surface name is already a
+    // known patch name (the CHT/snappy convention of sharing names), so a
+    // geometry-only surface like "hull" is never scanned as a patch site
+    private* refinementSurfaceKeyNodes(file: CaseFile): Iterable<TreeParser.SyntaxNode> {
+        if (!this.isSnappyHexMesh(file)) {
+            return;
+        }
+        for (const dict of file.tree.rootNode.descendantsOfType('dict')) {
+            if (dict.firstNamedChild?.text !== 'refinementSurfaces') {
+                continue;
+            }
+            let ancestor = dict.parent;
+            let inCastellated = false;
+            while (ancestor) {
+                if (ancestor.type === 'dict' && ancestor.firstNamedChild?.text === 'castellatedMeshControls') {
+                    inCastellated = true;
+                    break;
+                }
+                ancestor = ancestor.parent;
+            }
+            if (!inCastellated) {
+                continue;
+            }
+            const patchNames = this.knownPatchNames();
+            for (const key of this.dictEntryKeys(dict)) {
+                if (key.type === 'identifier' && patchNames.has(key.text)) {
+                    yield key;
+                }
+            }
+        }
+    }
+
     // identifiers inside list values of patch-list keys (decomposeParDict etc.)
     private* listReferenceNodes(file: CaseFile): Iterable<TreeParser.SyntaxNode> {
         const rel = this.relOf(file);
@@ -407,6 +445,11 @@ export class FoamCase {
                 this.collectKeyReferenceSites(sites, file, name, this.boundaryFieldKeyNodes(file));
             }
             this.collectKeyReferenceSites(sites, file, name, this.layersKeyNodes(file));
+            for (const key of this.refinementSurfaceKeyNodes(file)) {
+                if (key.text === name) {
+                    sites.push({ uri: file.uri, range: nodeRange(key), role: 'key-reference', displayOnly: true });
+                }
+            }
             for (const item of this.listReferenceNodes(file)) {
                 if (item.text === name) {
                     sites.push({ uri: file.uri, range: nodeRange(item), role: 'list-reference' });
@@ -462,6 +505,11 @@ export class FoamCase {
             }
         }
         for (const key of this.layersKeyNodes(file)) {
+            if (this.sameNode(key, node)) {
+                return true;
+            }
+        }
+        for (const key of this.refinementSurfaceKeyNodes(file)) {
             if (this.sameNode(key, node)) {
                 return true;
             }

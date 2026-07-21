@@ -115,6 +115,49 @@ describe('patch rename', () => {
         }
     });
 
+    test('refinementSurfaces key sharing a name with a real patch is a display-only site: seen by references, skipped by rename', () => {
+        const { parser, index, uri } = load(CAVITY);
+        // CHT/snappy convention: the STL surface is named after the patch it
+        // seeds. Injected via refreshFromDocument so the shared cavity fixture
+        // (and its exact-reference-count assertions elsewhere) stays untouched.
+        const synthetic = `
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      snappyHexMeshDict;
+}
+
+castellatedMeshControls
+{
+    refinementSurfaces
+    {
+        movingWall
+        {
+            level (1 1);
+        }
+    }
+}
+`;
+        const snappyUri = uri('system/snappyHexMeshDict');
+        const tree = parser.parse(synthetic);
+        index.refreshFromDocument(snappyUri, synthetic, tree);
+        const foamCase = new FoamCase(index);
+
+        const sites = foamCase.findPatchSites('movingWall').filter(s => s.uri === snappyUri);
+        assert.strictEqual(sites.length, 1);
+        assert.strictEqual(sites[0].displayOnly, true);
+
+        const file = index.getFile(uri('0/U'));
+        const pos = posOf(file.content, 'movingWall');
+        const rename = new FoamRename(parser, index);
+        const edit = rename.rename({ uri: file.uri }, file.content, pos, 'lid', file.tree);
+        assert.ok(edit && edit.changes);
+        assert.strictEqual(edit.changes[snappyUri], undefined,
+            'display-only refinementSurfaces site must not receive a rename edit');
+    });
+
     test('legacy blockMeshDict "patches ( type name (faces) ... )" declares patches', () => {
         const { parser, index, uri } = load(CAVITY);
         const legacy = `

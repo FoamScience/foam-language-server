@@ -67,4 +67,18 @@ describe('inlay hints', () => {
         // hint sits right after `]`, before the value
         assert.strictEqual(content[hints[0].position.character - 1], ']');
     });
+
+    test('5-element (pre-1.6) kinematic-viscosity dimension set renders as m²/s', () => {
+        const content = 'dimensions [0 2 -1 0 0];\n';
+        const hints = new FoamInlayHints(newParser()).computeInlayHints(content, FULL_RANGE);
+        assert.strictEqual(hints.length, 1);
+        assert.strictEqual(hints[0].label, 'm²/s');
+    });
+
+    test('5-element (pre-1.6) dimension set resolves the same named unit as its 7-element form', () => {
+        const content = 'dimensions [1 -1 -2 0 0];\n';
+        const hints = new FoamInlayHints(newParser()).computeInlayHints(content, FULL_RANGE);
+        assert.strictEqual(hints.length, 1);
+        assert.strictEqual(hints[0].label, 'kg/(m·s²) (Pa)');
+    });
 });

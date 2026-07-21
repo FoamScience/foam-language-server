@@ -19,7 +19,7 @@ import {
     TextDocument, TextEdit, Range, Position,
     CompletionItem, CompletionItemKind, CompletionItemTag, InsertTextFormat, TextDocumentIdentifier
 } from 'vscode-languageserver-types';
-import { Util, KEYWORDS, DIRECTIVES, SNIPPETS, KEYWORD_DB, KeywordEntry, keywordsFor } from './foam';
+import { Util, KEYWORDS, DIRECTIVES, SNIPPETS, KEYWORD_DB, KeywordEntry, keywordsFor, runtimeDoc } from './foam';
 import { CompletionItemCapabilities } from './main';
 import { FoamCompletion } from './foamCompletion';
 import { FoamSymbols } from './foamSymbols';
@@ -42,7 +42,8 @@ export class FoamAssist {
     // active banana trick: kicks off a background probe for dictPath (last
     // segment is the keyword under completion); undefined when opted out
     private probeCallback?: (dictPath: string[]) => void;
-    // active banana trick: keyword -> options already harvested for this uri
+    // active banana trick: dict path (joined with '/') -> options already
+    // harvested for this uri
     private bananaOptions: Map<string, string[]>;
 
     // Assist in proposing completion items
@@ -213,13 +214,21 @@ export class FoamAssist {
                         proposals.push({
                             label: value,
                             kind: CompletionItemKind.Value,
-                            data: keyContext
+                            // resolve to the class docs when the value is a
+                            // runtime-selectable name, else to keyword docs
+                            data: runtimeDoc(value) ? value : keyContext
                         });
                     }
                 }
             }
+            // dict path (outermost first) + keyword, joined with '/' — same
+            // key format the active banana trick's cache is keyed by, so a
+            // keyword like "default" in ddtSchemes doesn't collide with the
+            // same keyword in gradSchemes
+            const dictPath = [...dictNames].reverse().concat([keyContext]);
+            const pathKey = dictPath.join('/');
             const harvestedOptions = this.solverOptions.concat(
-                (this.bananaOptions.get(keyContext) ?? []).filter(o => !this.solverOptions.includes(o))
+                (this.bananaOptions.get(pathKey) ?? []).filter(o => !this.solverOptions.includes(o))
             );
             for (const option of harvestedOptions) {
                 if (option.startsWith(word) && !proposals.some(p => p.label === option)) {
@@ -227,7 +236,9 @@ export class FoamAssist {
                         label: option,
                         kind: CompletionItemKind.Value,
                         detail: "from solver",
-                        sortText: "0" + option
+                        sortText: "0" + option,
+                        // class docs on resolve (issue #15)
+                        data: option
                     });
                 }
             }
@@ -238,7 +249,6 @@ export class FoamAssist {
             // the cache for the next completion request, this one doesn't wait.
             if (this.probeCallback && harvestedOptions.length === 0
                 && (!entry || !entry.values || entry.values.length === 0)) {
-                const dictPath = [...dictNames].reverse().concat([keyContext]);
                 this.probeCallback(dictPath);
             }
         }

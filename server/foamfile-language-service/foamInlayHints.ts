@@ -120,15 +120,15 @@ export class FoamInlayHints {
     }
 
     private buildHint(node: TreeParser.SyntaxNode, range: Range): InlayHint | null {
-        // ponytail: only the current 7-base-unit (kg m s K mol A cd) dimension
-        // sets are labeled; the pre-1.6 5-element form parses fine too but its
-        // base-unit order isn't nailed down here, add a table if it comes up
-        const exponents = node.namedChildren
+        const parsed = node.namedChildren
             .filter(child => child.type === 'number_literal')
             .map(child => parseFloat(child.text));
-        if (exponents.length !== 7 || exponents.some(exp => !Number.isInteger(exp))) {
+        if ((parsed.length !== 5 && parsed.length !== 7) || parsed.some(exp => !Number.isInteger(exp))) {
             return null;
         }
+        // pre-1.6 OpenFOAM's 5-element form omits electric current and
+        // luminous intensity (kg m s K mol); pad to the 7-element table
+        const exponents = parsed.length === 5 ? parsed.concat([0, 0]) : parsed;
         const position: Position = { line: node.endPosition.row, character: node.endPosition.column };
         if (!isWithinRange(position, range)) {
             return null;

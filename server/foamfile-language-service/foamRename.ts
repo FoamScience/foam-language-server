@@ -75,9 +75,10 @@ export class FoamRename {
         };
 
         if (target.kind === 'patch' || target.kind === 'patchGroup') {
-            const sites = target.kind === 'patch'
+            const sites = (target.kind === 'patch'
                 ? foamCase.findPatchSites(target.name)
-                : foamCase.findGroupSites(target.name);
+                : foamCase.findGroupSites(target.name))
+                .filter(site => !site.displayOnly);
             for (const site of sites) {
                 if (site.quoted) {
                     const file = this.index?.getFile(site.uri);

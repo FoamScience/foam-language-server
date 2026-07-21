@@ -26,6 +26,7 @@ import { DocumentCache } from './foamfile-language-service/documentCache';
 import { SyntaxValidator } from './foamfile-utils/syntaxValidator';
 import { ValidatorSettings, ValidationSeverity } from './foamfile-utils/main';
 import { CommandIds, FoamLanguageServiceFactory } from './foamfile-language-service/main';
+import { reconcileSolverTargets } from './solverTargets';
 
 // The settings to use for the validator if the client doesn't support
 // workspace/configuration requests.
@@ -365,8 +366,10 @@ function convertValidatorConfiguration(config: ValidatorConfiguration): Validato
 // Solver runs are debounced per document and their results discarded
 // when the document changed while the solver was running
 const solverTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
-// solver diagnostics can land on other files; remember them to clear stale ones
-let lastSolverTargets: Set<string> = new Set();
+// solver diagnostics can land on other files; remember them per source
+// document so a run from one file only clears the stale targets it owns,
+// not another source document's (see reconcileSolverTargets)
+const lastSolverTargets: Map<string, Set<string>> = new Map();
 
 async function runSolverValidation(uri: string): Promise<void> {
 	const document = documents.get(uri);
@@ -388,16 +391,8 @@ async function runSolverValidation(uri: string): Promise<void> {
 		target.push(diagnostics[i]);
 		byUri.set(id.uri, target);
 	});
-	// clear solver slices that no longer have errors
-	for (const target of lastSolverTargets) {
-		if (!byUri.has(target)) {
-			byUri.set(target, []);
-		}
-	}
-	if (!byUri.has(uri)) {
-		byUri.set(uri, []);
-	}
-	lastSolverTargets = new Set([...byUri.keys()].filter(u => byUri.get(u).length > 0));
+	const newTargets = reconcileSolverTargets(byUri, lastSolverTargets.get(uri) ?? new Set(), uri);
+	lastSolverTargets.set(uri, newTargets);
 	for (const [target, diags] of byUri) {
 		diagnosticsFor(target).solver = diags;
 		publishDiagnostics(target);
@@ -566,7 +561,7 @@ connection.onCompletionResolve((item: CompletionItem): CompletionItem => {
 connection.onHover((textDocumentPosition: TextDocumentPositionParams): PromiseLike<Hover> => {
 	return getDocument(textDocumentPosition.textDocument.uri).then((document) => {
 		if (document) {
-			return service.computeHover(document.getText(), textDocumentPosition.position, getTree(document));
+			return service.computeHover(document.getText(), textDocumentPosition.position, getTree(document), document.uri);
 		}
 		return null;
 	});
@@ -760,6 +755,7 @@ documents.onDidClose((event) => {
 		clearTimeout(pending);
 		solverTimers.delete(event.document.uri);
 	}
+	lastSolverTargets.delete(event.document.uri);
 	validatorConfigurations.delete(event.document.uri);
 	diagnosticsState.delete(event.document.uri);
 	service.clearSemanticTokensDelta(event.document.uri);

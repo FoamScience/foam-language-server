@@ -130,7 +130,7 @@ export interface FoamLanguageService {
 
     computeReferences(textDocument: TextDocumentIdentifier, content: string, position: Position, tree?: TreeParser.Tree): Location[];
 
-    computeHover(content: string, position: Position, tree?: TreeParser.Tree): Hover | null;
+    computeHover(content: string, position: Position, tree?: TreeParser.Tree, uri?: string): Hover | null;
 
     computeSymbols(textDocument: TextDocumentIdentifier, content: string, tree?: TreeParser.Tree): SymbolInformation[];
 
@@ -154,8 +154,6 @@ export interface FoamLanguageService {
     clearSemanticTokensDelta(uri: string): void;
 
     computeInlayHints(content: string, range: Range, tree?: TreeParser.Tree): InlayHint[];
-
-    validate(content: string, parser: TreeParser,  settings?: ValidatorSettings, tree?: TreeParser.Tree): [TextDocumentIdentifier[], Diagnostic[]];
 
     validateWithSolver(uri: string, content: string, settings?: ValidatorSettings): Promise<[TextDocumentIdentifier[], Diagnostic[]]>;
 

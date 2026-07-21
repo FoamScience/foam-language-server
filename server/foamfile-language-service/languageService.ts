@@ -48,8 +48,10 @@ export class LanguageService implements FoamLanguageService {
     // active banana trick: opt-in, off by default
     private bananaTrickEnabled: boolean = false;
     private bananaSolverRunner?: FoamUtils.SolverRunner;
-    // per-uri, per-keyword "Valid options" harvested by deliberately
-    // provoking the solver with a nonsense ("banana") value
+    // per-uri, per-dict-path "Valid options" harvested by deliberately
+    // provoking the solver with a nonsense ("banana") value. Inner key is
+    // the enclosing dict path (outermost first) + keyword, joined with '/'
+    // — dict/keyword names can't contain '/', so paths can't collide.
     private bananaCache: Map<string, Map<string, string[]>> = new Map();
     // ponytail: a single flag serializes probes since only one case is ever
     // indexed at a time; would need a per-case-root map for multi-root workspaces
@@ -134,29 +136,29 @@ export class LanguageService implements FoamLanguageService {
         this.bananaSolverRunner = solverRunner;
     }
 
-    private cacheBananaResult(uri: string, keyword: string, options: string[]): void {
+    private cacheBananaResult(uri: string, pathKey: string, options: string[]): void {
         let forUri = this.bananaCache.get(uri);
         if (!forUri) {
             forUri = new Map();
             this.bananaCache.set(uri, forUri);
         }
-        forUri.set(keyword, options);
+        forUri.set(pathKey, options);
     }
 
     // At most one probe in flight at a time; repeat requests for an
-    // already-cached (uri, keyword) — including a prior empty result — no-op.
+    // already-cached (uri, dict path) — including a prior empty result — no-op.
     private triggerBananaProbe(uri: string, dictPath: string[]): void {
         if (!this.workspaceIndex || this.bananaProbeRunning) {
             return;
         }
-        const keyword = dictPath[dictPath.length - 1];
-        if (this.bananaCache.get(uri)?.has(keyword)) {
+        const pathKey = dictPath.join('/');
+        if (this.bananaCache.get(uri)?.has(pathKey)) {
             return;
         }
         this.bananaProbeRunning = true;
         new FoamBananaTrick(this.parser, this.bananaSolverRunner).probe(uri, dictPath, this.workspaceIndex)
-            .then(options => this.cacheBananaResult(uri, keyword, options))
-            .catch(() => this.cacheBananaResult(uri, keyword, []))
+            .then(options => this.cacheBananaResult(uri, pathKey, options))
+            .catch(() => this.cacheBananaResult(uri, pathKey, []))
             .finally(() => { this.bananaProbeRunning = false; });
     }
 
@@ -193,9 +195,9 @@ export class LanguageService implements FoamLanguageService {
         return foamHighlight.computeHighlightRanges(textDocument, content, position, tree);
     }
 
-    public computeHover(content: string, position: Position, tree?: Parser.Tree): Hover | null {
-        let foamHover = new FoamHover(this.markdownDocumentation, this.plainTextDocumentation, this.parser);
-        return foamHover.onHover(content, position, this.hoverContentFormat, tree);
+    public computeHover(content: string, position: Position, tree?: Parser.Tree, uri?: string): Hover | null {
+        let foamHover = new FoamHover(this.markdownDocumentation, this.plainTextDocumentation, this.parser, this.workspaceIndex);
+        return foamHover.onHover(content, position, this.hoverContentFormat, tree, uri);
     }
 
     public computeSymbols(textDocument: TextDocumentIdentifier, content: string, tree?: Parser.Tree): SymbolInformation[] {
@@ -248,10 +250,6 @@ export class LanguageService implements FoamLanguageService {
     public computeInlayHints(content: string, range: Range, tree?: Parser.Tree): InlayHint[] {
         let foamInlayHints = new FoamInlayHints(this.parser);
         return foamInlayHints.computeInlayHints(content, range, tree);
-    }
-
-    public validate(content: string, parser: TreeParser, settings?: FoamUtils.ValidatorSettings, tree?: Parser.Tree): [TextDocumentIdentifier[], Diagnostic[]] {
-        return FoamUtils.validate(content, parser, settings, tree);
     }
 
     public async validateWithSolver(uri: string, content: string, settings?: FoamUtils.ValidatorSettings): Promise<[TextDocumentIdentifier[], Diagnostic[]]> {

@@ -40,8 +40,8 @@ function snapshot(dir) {
     return files;
 }
 
-function posAtEnd(content, needle) {
-    const at = content.indexOf(needle);
+function posAtEnd(content, needle, fromIndex = 0) {
+    const at = content.indexOf(needle, fromIndex);
     assert.notStrictEqual(at, -1);
     const before = content.slice(0, at + needle.length);
     const line = before.split('\n').length - 1;
@@ -59,16 +59,20 @@ const FVSCHEMES_URI = 'file://' + path.join(CAVITY, 'system', 'fvSchemes');
 const CONTENT = 'FoamFile\n{\n    object fvSchemes;\n}\n\nddtSchemes\n{\n    default st\n}\n';
 const POSITION = posAtEnd(CONTENT, 'default st');
 
-async function pollForSolverOptions(service, timeoutMs = 1000) {
+async function pollForSolverOptionsAt(service, content, position, timeoutMs = 1000) {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
-        const props = await service.computeCompletionItems(CONTENT, POSITION, undefined, FVSCHEMES_URI);
+        const props = await service.computeCompletionItems(content, position, undefined, FVSCHEMES_URI);
         if (props.some(p => p.detail === 'from solver')) {
             return props;
         }
         await new Promise(resolve => setTimeout(resolve, 5));
     }
     throw new Error('timed out waiting for banana options to populate the completion cache');
+}
+
+async function pollForSolverOptions(service, timeoutMs = 1000) {
+    return pollForSolverOptionsAt(service, CONTENT, POSITION, timeoutMs);
 }
 
 describe('active banana trick: probe mechanics', () => {
@@ -80,10 +84,10 @@ describe('active banana trick: probe mechanics', () => {
 
         const trick = new FoamBananaTrick(parser, async () => fixtureStderr());
         const writes = [];
-        const originalWrite = fs.writeFileSync;
-        fs.writeFileSync = (target, ...rest) => {
+        const originalWrite = fs.promises.writeFile;
+        fs.promises.writeFile = (target, ...rest) => {
             writes.push(target);
-            return originalWrite(target, ...rest);
+            return originalWrite.call(fs.promises, target, ...rest);
         };
         // resolved before the probe runs: the scratch dir is gone (cleaned
         // up in the probe's `finally`) by the time we'd otherwise check it
@@ -92,7 +96,7 @@ describe('active banana trick: probe mechanics', () => {
         try {
             options = await trick.probe(FVSCHEMES_URI, ['ddtSchemes', 'default'], index);
         } finally {
-            fs.writeFileSync = originalWrite;
+            fs.promises.writeFile = originalWrite;
         }
 
         assert.deepStrictEqual(options, ['CrankNicolson', 'Euler', 'backward', 'steadyState']);
@@ -103,6 +107,34 @@ describe('active banana trick: probe mechanics', () => {
         }
 
         assert.deepStrictEqual(snapshot(CAVITY), before, 'the fixture must be untouched after the probe');
+    });
+
+    test('probe does no synchronous fs work before its first await (issue #9)', async () => {
+        const parser = newParser();
+        const index = new FoamWorkspaceIndex(parser);
+        index.initialize('file://' + CAVITY);
+        const trick = new FoamBananaTrick(parser, async () => fixtureStderr());
+
+        // the completion handler calls probe() synchronously; everything up
+        // to its first await runs on the completion path and must not touch
+        // the filesystem
+        let syncCalls = 0;
+        const originals = {};
+        for (const name of ['mkdtempSync', 'readdirSync', 'readFileSync', 'writeFileSync', 'statSync']) {
+            originals[name] = fs[name];
+            fs[name] = (...args) => { syncCalls++; return originals[name](...args); };
+        }
+        let probing;
+        try {
+            probing = trick.probe(FVSCHEMES_URI, ['ddtSchemes', 'default'], index);
+            assert.strictEqual(syncCalls, 0, 'probe() blocked the completion path with sync fs work');
+        } finally {
+            for (const name of Object.keys(originals)) {
+                fs[name] = originals[name];
+            }
+        }
+        const options = await probing;
+        assert.deepStrictEqual(options, ['CrankNicolson', 'Euler', 'backward', 'steadyState']);
     });
 
     test('missing dict path resolves to no options instead of throwing', async () => {
@@ -147,6 +179,36 @@ describe('active banana trick: LanguageService integration', () => {
         const callsSoFar = runnerCalls;
         await service.computeCompletionItems(CONTENT, POSITION, undefined, FVSCHEMES_URI);
         await new Promise(resolve => setTimeout(resolve, 20));
-        assert.strictEqual(runnerCalls, callsSoFar, 'a cached (uri, keyword) must not re-probe');
+        assert.strictEqual(runnerCalls, callsSoFar, 'a cached (uri, dict path) must not re-probe');
+    });
+
+    test('same bare keyword in two different dicts is cached and probed separately', async () => {
+        const service = await newService();
+        let runnerCalls = 0;
+        service.setBananaTrick(true, async () => { runnerCalls++; return fixtureStderr(); });
+
+        const content =
+            'FoamFile\n{\n    object fvSchemes;\n}\n\n' +
+            'ddtSchemes\n{\n    default st;\n}\n\n' +
+            'gradSchemes\n{\n    default st;\n}\n';
+        const ddtPos = posAtEnd(content, 'default st');
+        const gradPos = posAtEnd(content, 'default st', content.indexOf('gradSchemes'));
+
+        await service.computeCompletionItems(content, ddtPos, undefined, FVSCHEMES_URI);
+        const ddtProps = await pollForSolverOptionsAt(service, content, ddtPos);
+        assert.ok(ddtProps.some(p => p.detail === 'from solver'),
+            'ddtSchemes/default should get its own cached options');
+        const callsAfterDdt = runnerCalls;
+        assert.ok(callsAfterDdt >= 1);
+
+        // gradSchemes/default shares the bare keyword "default" but is a
+        // different dict path; it must not reuse ddtSchemes/default's cache
+        // entry and must trigger its own probe
+        const gradFirst = await service.computeCompletionItems(content, gradPos, undefined, FVSCHEMES_URI);
+        assert.strictEqual(gradFirst.filter(p => p.detail === 'from solver').length, 0,
+            'gradSchemes/default has not been probed yet, so nothing is cached for it');
+        const gradProps = await pollForSolverOptionsAt(service, content, gradPos);
+        assert.ok(gradProps.some(p => p.detail === 'from solver'));
+        assert.ok(runnerCalls > callsAfterDdt, 'gradSchemes/default must trigger its own probe');
     });
 });
