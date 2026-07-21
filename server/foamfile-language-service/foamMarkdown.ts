@@ -13,6 +13,7 @@
 
 import { MarkupContent, MarkupKind } from "vscode-languageserver";
 import { Hover } from 'vscode-languageserver-types';
+import { KEYWORD_DB } from './foam';
 
 export class MarkdownDocumentation {
 
@@ -62,6 +63,24 @@ export class MarkdownDocumentation {
                     "```"
             }
         };
+
+        // keywords.json is the source of truth; hand-written entries above win
+        for (const object of Object.keys(KEYWORD_DB)) {
+            for (const keyword of Object.keys(KEYWORD_DB[object])) {
+                if (this.markdowns[keyword] !== undefined) {
+                    continue;
+                }
+                const entry = KEYWORD_DB[object][keyword];
+                let contents = (entry.doc ?? "") + "\n";
+                if (entry.examples) {
+                    contents += "\n```\n" + entry.examples + "\n```";
+                }
+                if (entry.values) {
+                    contents += "\n\nValid values: `" + entry.values.join("`, `") + "`";
+                }
+                this.markdowns[keyword] = { contents };
+            }
+        }
     }
 
     // Will be used to get online Docs if any

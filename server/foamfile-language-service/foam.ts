@@ -5,13 +5,30 @@
 'use strict';
 
 import { Range, Position } from 'vscode-languageserver-types';
+import * as KEYWORD_DATA from './data/keywords.json';
 
-// Most common keywords, hopefully, all of these should have
-// local docs in foamPlainText.ts and foamMarkdown.ts
-export const KEYWORDS = [
-    "type",
-    "value",
-];
+export interface KeywordEntry {
+    doc?: string;
+    examples?: string;
+    values?: string[];
+    snippet?: string;
+}
+
+// Keyword knowledge base: { "<objectName|*>": { "<keyword>": KeywordEntry } }
+// Single source of truth for completion, hover and signature docs.
+export const KEYWORD_DB: { [object: string]: { [keyword: string]: KeywordEntry } } =
+    KEYWORD_DATA as any;
+
+// Keywords usable for a given file (FoamFile object name), universal ones included
+export function keywordsFor(objectName?: string): { [keyword: string]: KeywordEntry } {
+    return { ...(KEYWORD_DB[objectName] ?? {}), ...KEYWORD_DB["*"] };
+}
+
+// Flat keyword list, universal entries first (kept for API compatibility)
+export const KEYWORDS = Object.keys(KEYWORD_DB)
+    .sort((a, b) => a === "*" ? -1 : b === "*" ? 1 : 0)
+    .reduce((all: string[], object) => all.concat(Object.keys(KEYWORD_DB[object])), [])
+    .filter((keyword, i, all) => all.indexOf(keyword) === i);
 
 // Most common preprocessor-like directives, hopefully, 
 // all of these should have

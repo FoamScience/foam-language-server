@@ -1,0 +1,230 @@
+{
+  "*": {
+    "type": {
+      "doc": "Choose the type of the object.",
+      "examples": "type fixedValue;\ntype wall;"
+    },
+    "value": {
+      "doc": "Choose the value assigned to the object.",
+      "examples": "value uniform 0;\nvalue nonuniform List<scalar> 3(0 2 1);"
+    },
+    "dimensions": {
+      "doc": "Physical dimensions of the field: [kg m s K mol A cd].",
+      "examples": "dimensions [0 2 -1 0 0 0 0];"
+    },
+    "internalField": {
+      "doc": "Initial value of the field in the domain interior.",
+      "examples": "internalField uniform (0 0 0);"
+    },
+    "boundaryField": {
+      "doc": "Boundary conditions of the field, one sub-dictionary per patch."
+    },
+    "uniform": {
+      "doc": "Marks a field value that is constant in space."
+    },
+    "libs": {
+      "doc": "Additional shared-object libraries to load at solver start.",
+      "examples": "libs (\"libmyBC.so\");"
+    },
+    "functions": {
+      "doc": "Runtime-loaded function objects (probes, sampling, forces...)."
+    }
+  },
+  "controlDict": {
+    "application": {
+      "doc": "The solver this case is set up for."
+    },
+    "startFrom": {
+      "doc": "Where to pick the simulation start time from.",
+      "values": ["firstTime", "startTime", "latestTime"]
+    },
+    "startTime": {
+      "doc": "Start time of the simulation (used with startFrom startTime)."
+    },
+    "stopAt": {
+      "doc": "When to stop the simulation.",
+      "values": ["endTime", "writeNow", "noWriteNow", "nextWrite"]
+    },
+    "endTime": {
+      "doc": "End time of the simulation (used with stopAt endTime)."
+    },
+    "deltaT": {
+      "doc": "Time step of the simulation."
+    },
+    "writeControl": {
+      "doc": "Timing scheme for writing output.",
+      "values": ["timeStep", "runTime", "adjustableRunTime", "cpuTime", "clockTime"]
+    },
+    "writeInterval": {
+      "doc": "Interval (in writeControl units) between outputs."
+    },
+    "purgeWrite": {
+      "doc": "Keep only the most recent N time directories (0 keeps all)."
+    },
+    "writeFormat": {
+      "doc": "On-disk format of result files.",
+      "values": ["ascii", "binary"]
+    },
+    "writePrecision": {
+      "doc": "Significant figures in written output."
+    },
+    "writeCompression": {
+      "doc": "Compress written fields.",
+      "values": ["on", "off"]
+    },
+    "timeFormat": {
+      "doc": "Naming format of time directories.",
+      "values": ["fixed", "scientific", "general"]
+    },
+    "timePrecision": {
+      "doc": "Significant figures in time directory names."
+    },
+    "runTimeModifiable": {
+      "doc": "Re-read dictionaries at the start of each time step.",
+      "values": ["true", "false", "yes", "no"]
+    },
+    "adjustTimeStep": {
+      "doc": "Let the solver adapt deltaT to honour maxCo.",
+      "values": ["yes", "no"]
+    },
+    "maxCo": {
+      "doc": "Maximum Courant number when adjustTimeStep is active."
+    },
+    "maxDeltaT": {
+      "doc": "Upper bound on the adapted time step."
+    }
+  },
+  "fvSchemes": {
+    "ddtSchemes": {
+      "doc": "Time derivative discretisation schemes.",
+      "snippet": "ddtSchemes\n{\n\tdefault ${1:Euler};\n$0}"
+    },
+    "gradSchemes": {
+      "doc": "Gradient discretisation schemes.",
+      "snippet": "gradSchemes\n{\n\tdefault ${1:Gauss linear};\n$0}"
+    },
+    "divSchemes": {
+      "doc": "Divergence discretisation schemes.",
+      "snippet": "divSchemes\n{\n\tdefault ${1:none};\n$0}"
+    },
+    "laplacianSchemes": {
+      "doc": "Laplacian discretisation schemes.",
+      "snippet": "laplacianSchemes\n{\n\tdefault ${1:Gauss linear corrected};\n$0}"
+    },
+    "interpolationSchemes": {
+      "doc": "Cell-to-face interpolation schemes."
+    },
+    "snGradSchemes": {
+      "doc": "Surface-normal gradient schemes."
+    },
+    "default": {
+      "doc": "Fallback scheme applied when no specific entry matches."
+    }
+  },
+  "fvSolution": {
+    "solvers": {
+      "doc": "Linear solver settings, one sub-dictionary per matrix/field."
+    },
+    "solver": {
+      "doc": "Linear solver for this matrix.",
+      "values": ["PCG", "PBiCG", "PBiCGStab", "GAMG", "smoothSolver", "diagonal"]
+    },
+    "preconditioner": {
+      "doc": "Preconditioner for Krylov solvers.",
+      "values": ["DIC", "FDIC", "DILU", "GAMG", "diagonal", "none"]
+    },
+    "smoother": {
+      "doc": "Smoother for GAMG/smoothSolver.",
+      "values": ["GaussSeidel", "symGaussSeidel", "DIC", "DICGaussSeidel", "DILU"]
+    },
+    "tolerance": {
+      "doc": "Absolute residual at which the linear solve stops."
+    },
+    "relTol": {
+      "doc": "Relative residual reduction at which the linear solve stops (0 disables)."
+    },
+    "PISO": {
+      "doc": "Settings for the PISO pressure-velocity coupling loop."
+    },
+    "SIMPLE": {
+      "doc": "Settings for the SIMPLE steady-state coupling loop."
+    },
+    "PIMPLE": {
+      "doc": "Settings for the merged PISO-SIMPLE coupling loop."
+    },
+    "nCorrectors": {
+      "doc": "Number of pressure corrector iterations."
+    },
+    "nNonOrthogonalCorrectors": {
+      "doc": "Extra corrections for mesh non-orthogonality."
+    },
+    "relaxationFactors": {
+      "doc": "Under-relaxation factors for fields and equations."
+    },
+    "residualControl": {
+      "doc": "Convergence criteria for SIMPLE/PIMPLE outer loops."
+    }
+  },
+  "blockMeshDict": {
+    "convertToMeters": {
+      "doc": "Scaling factor applied to all vertex coordinates."
+    },
+    "scale": {
+      "doc": "Scaling factor applied to all vertex coordinates (newer name)."
+    },
+    "vertices": {
+      "doc": "List of block corner points."
+    },
+    "blocks": {
+      "doc": "Hex block definitions: vertex ordering, cell counts, grading."
+    },
+    "edges": {
+      "doc": "Curved edge definitions (arc, spline, ...)."
+    },
+    "boundary": {
+      "doc": "Boundary patches: name, type and face lists.",
+      "snippet": "boundary\n(\n\t${1:patchName}\n\t{\n\t\ttype ${2:patch};\n\t\tfaces\n\t\t(\n\t\t\t($3)\n\t\t);\n\t}\n$0);"
+    },
+    "mergePatchPairs": {
+      "doc": "Pairs of patches to merge into internal faces."
+    }
+  },
+  "decomposeParDict": {
+    "numberOfSubdomains": {
+      "doc": "How many processors to decompose the case for."
+    },
+    "method": {
+      "doc": "Domain decomposition method.",
+      "values": ["simple", "hierarchical", "scotch", "kahip", "metis", "manual"]
+    },
+    "preservePatches": {
+      "doc": "Patches to keep on a single processor (e.g. cyclics)."
+    }
+  },
+  "transportProperties": {
+    "transportModel": {
+      "doc": "Viscosity model of the fluid.",
+      "values": ["Newtonian", "BirdCarreau", "CrossPowerLaw", "powerLaw", "HerschelBulkley"]
+    },
+    "nu": {
+      "doc": "Kinematic viscosity."
+    }
+  },
+  "turbulenceProperties": {
+    "simulationType": {
+      "doc": "Turbulence modelling framework.",
+      "values": ["laminar", "RAS", "LES"]
+    }
+  },
+  "boundaryField": {
+    "type": {
+      "doc": "Boundary condition type for this patch.",
+      "values": [
+        "fixedValue", "zeroGradient", "noSlip", "empty", "symmetry",
+        "symmetryPlane", "slip", "calculated", "inletOutlet",
+        "fixedGradient", "cyclic", "wedge", "totalPressure",
+        "pressureInletOutletVelocity", "movingWallVelocity"
+      ]
+    }
+  }
+}

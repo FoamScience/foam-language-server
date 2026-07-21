@@ -13,6 +13,7 @@
 'use strict';
 
 import { MarkupContent, MarkupKind } from "vscode-languageserver";
+import { KEYWORD_DB } from './foam';
 
 export class PlainTextDocumentation {
 
@@ -67,6 +68,24 @@ export class PlainTextDocumentation {
             },
 
         };
+
+        // keywords.json is the source of truth; hand-written entries above win
+        for (const object of Object.keys(KEYWORD_DB)) {
+            for (const keyword of Object.keys(KEYWORD_DB[object])) {
+                if (this.markdowns[keyword] !== undefined) {
+                    continue;
+                }
+                const entry = KEYWORD_DB[object][keyword];
+                let contents = (entry.doc ?? "") + "\n";
+                if (entry.examples) {
+                    contents += "\n" + entry.examples;
+                }
+                if (entry.values) {
+                    contents += "\n\nValid values: " + entry.values.join(", ");
+                }
+                this.markdowns[keyword] = { contents };
+            }
+        }
     }
 
     /*
