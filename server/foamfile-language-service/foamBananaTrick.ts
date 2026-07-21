@@ -5,10 +5,14 @@
 
     Runs entirely against a scratch copy of the case under os.tmpdir() —
     the user's own case files are never written to.
+
+    All filesystem work is async on purpose: probe() is kicked off (fire
+    and forget) from the completion handler, so nothing here may block the
+    event loop while a completion response is being computed (issue #9).
 */
 'use strict';
 
-import { readdirSync, statSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'fs';
+import { promises as fsp } from 'fs';
 import * as os from 'os';
 import * as TreeParser from 'tree-sitter';
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -55,16 +59,16 @@ export class FoamBananaTrick {
             return [];
         }
 
-        const scratchDir = mkdtempSync(path.join(os.tmpdir(), 'foam-banana-'));
+        const scratchDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'foam-banana-'));
         try {
-            this.copyCaseSkeleton(root, scratchDir);
+            await this.copyCaseSkeleton(root, scratchDir);
 
             const bananaContent = file.content.slice(0, valueNode.startIndex)
                 + 'banana'
                 + file.content.slice(valueNode.endIndex);
             const scratchFile = path.join(scratchDir, relPath);
-            mkdirSync(path.dirname(scratchFile), { recursive: true });
-            writeFileSync(scratchFile, bananaContent);
+            await fsp.mkdir(path.dirname(scratchFile), { recursive: true });
+            await fsp.writeFile(scratchFile, bananaContent);
 
             const validator = new Validator(this.parser, { rootUri: 'file://' + scratchDir }, this.solverRunner);
             const document = TextDocument.create('file://' + scratchFile, 'foam', 0, bananaContent);
@@ -76,31 +80,31 @@ export class FoamBananaTrick {
             }
             return [];
         } finally {
-            rmSync(scratchDir, { recursive: true, force: true });
+            await fsp.rm(scratchDir, { recursive: true, force: true });
         }
     }
 
     // ponytail: binary files (e.g. binary-format mesh geometry) are skipped
     // wholesale rather than copied verbatim, so probes against binary-mesh
     // cases degrade to no options; copy raw bytes instead if that bites
-    private copyCaseSkeleton(root: string, dest: string): void {
+    private async copyCaseSkeleton(root: string, dest: string): Promise<void> {
         let names: string[];
         try {
-            names = readdirSync(root);
+            names = await fsp.readdir(root);
         } catch {
             return;
         }
         for (const name of names) {
             if (INDEXED_TOPDIRS.test(name) && !name.startsWith('processor')) {
-                this.copyDir(path.join(root, name), path.join(dest, name));
+                await this.copyDir(path.join(root, name), path.join(dest, name));
             }
         }
     }
 
-    private copyDir(srcDir: string, destDir: string): void {
+    private async copyDir(srcDir: string, destDir: string): Promise<void> {
         let entries;
         try {
-            entries = readdirSync(srcDir, { withFileTypes: true });
+            entries = await fsp.readdir(srcDir, { withFileTypes: true });
         } catch {
             return;
         }
@@ -108,25 +112,25 @@ export class FoamBananaTrick {
             const src = path.join(srcDir, entry.name);
             if (entry.isDirectory()) {
                 if (!SKIPPED_DIRS.has(entry.name) && !entry.name.startsWith('processor')) {
-                    this.copyDir(src, path.join(destDir, entry.name));
+                    await this.copyDir(src, path.join(destDir, entry.name));
                 }
             } else if (entry.isFile()) {
-                this.copyFile(src, path.join(destDir, entry.name));
+                await this.copyFile(src, path.join(destDir, entry.name));
             }
         }
     }
 
-    private copyFile(src: string, dest: string): void {
+    private async copyFile(src: string, dest: string): Promise<void> {
         try {
-            if (statSync(src).size > MAX_FILE_SIZE) {
+            if ((await fsp.stat(src)).size > MAX_FILE_SIZE) {
                 return;
             }
-            const content = readFileSync(src, 'utf-8');
+            const content = await fsp.readFile(src, 'utf-8');
             if (content.includes('\0') || /format\s+binary/.test(content.slice(0, 2048))) {
                 return;
             }
-            mkdirSync(path.dirname(dest), { recursive: true });
-            writeFileSync(dest, content);
+            await fsp.mkdir(path.dirname(dest), { recursive: true });
+            await fsp.writeFile(dest, content);
         } catch {
             // unreadable file: not copied
         }

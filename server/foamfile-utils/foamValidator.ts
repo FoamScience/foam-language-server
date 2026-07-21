@@ -16,8 +16,8 @@ import { ValidationCode, ValidationSeverity, ValidatorSettings } from './main';
 
 import * as TreeParser from 'tree-sitter';
 
-import { spawn, spawnSync, execSync } from 'child_process';
-import { writeFile, readFileSync, existsSync } from 'fs';
+import { spawn } from 'child_process';
+import { readFileSync, existsSync } from 'fs';
 var path = require('path');
 
 // Async solver runs are hard-killed on whichever comes first:
@@ -409,77 +409,6 @@ export class Validator {
             }
         }
     }
-    // Run the solver
-    private runSolver() {
-        const controlDict : string = readFileSync(path.join(this.settings.rootUri.replace("file://",''), 'system/controlDict'), 'ascii');
-        let solver : string;
-        for (const entry of this.getKeywordValue(controlDict, "application")) {
-            // Last one wins
-            solver = entry;
-        }
-
-        var results: ParsedError;// = ["", "", "", "", []];
-
-        // with spawn, maxBuffer restricts both stderr and stdout
-        // we're interested in limiting stdout without trimming stderr
-        // TODO: Make sure 2048 bytes is enough to capture all OpenFOAM errors
-        let res = spawnSync
-        (
-            solver,
-            { maxBuffer: 2048, encoding: 'utf-8', cwd: this.settings.rootUri.replace("file://", '') }
-        );
-        results = this.parseFoamError(res.stderr.toString().replace(/\r?\n/g," ").replace(/\s+/g, " ").toString())
-
-        // with exec
-        //try {
-        //    // Run solver, if it works kill it after writing 4096 bytes
-        //    let res = execSync
-        //    (
-        //        solver,
-        //        { maxBuffer: 4096, timeout:500, encoding: 'utf-8' }
-        //    );
-        //    return ["", "", "", "", []];
-        //} catch (err)
-        //{
-        //    // If it errors out (hopefully), parse error
-        //    return this.parseFoamError(err.stderr.replace(/\r?\n/g," ").replace(/\s+/g, " ").toString())
-        //}
-        return results;
-    }
-
-    /*
-       Compute diagnostics
-       @deprecated blocking, first-error-only; use validateWithSolver instead
-    */
-    validate(document: TextDocument): [TextDocumentIdentifier[], Diagnostic[]] {
-        this.document = document;
-        let problems: Diagnostic[] = [];
-        let uris: TextDocumentIdentifier[] = [];
-
-        try {
-            const result = this.runSolver();
-
-            var pos1: number = result.start-1;
-            var pos2: number = result.end-1;
-            const problem = Diagnostic.create(
-                Range.create(pos1,0,pos2,3),
-                result.message.toString(),
-                DiagnosticSeverity.Error,
-                result.errorType.toString(),
-                `${of_fork}-${of_version}(${of_compile_option})`,
-            );
-            problems.push(problem);
-            // For URIs, falling back to current file if parsing the error text
-            // didn't reveal a file
-            uris.push({ uri: (result.uri === undefined ? document.uri : result.uri ) })
-        } catch {
-            // If can't get diagnostics, just stay silent
-            //console.warn("Could not get diagnostics...");
-        }
-
-        return [uris, problems];
-    }
-
     // Supported types of OpenFOAM errors
     private static foamProblems = {
         "FoamFatalError": "Generic OpenFOAM errors",
