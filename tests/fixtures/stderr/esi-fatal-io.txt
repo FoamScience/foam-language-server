@@ -1,0 +1,22 @@
+--> FOAM FATAL IO ERROR: (openfoam-2312)
+Unknown solver type PCGG
+
+Valid solver types :
+
+7
+(
+GAMG
+PBiCG
+PBiCGStab
+PCG
+diagonal
+smoothSolver
+symGaussSeidel
+)
+
+file: /home/user/cavity/system/fvSolution.solvers.p at line 25.
+
+    From function static Foam::autoPtr<Foam::lduMatrix::solver> Foam::lduMatrix::solver::New(const Foam::word&, const Foam::lduMatrix&, const Foam::FieldField<Foam::Field, double>&, const Foam::FieldField<Foam::Field, double>&, const Foam::lduInterfaceFieldPtrsList&, const Foam::dictionary&)
+    in file matrices/lduMatrix/lduMatrix/lduMatrixSolver.C at line 82.
+
+FOAM exiting

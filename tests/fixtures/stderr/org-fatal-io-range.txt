@@ -1,0 +1,9 @@
+--> FOAM FATAL IO ERROR:
+wrong token type - expected Scalar, found on line 22 the punctuation token '{'
+
+file: /home/user/cavity/0/p.boundaryField.movingWall from line 22 to line 30.
+
+    From function Foam::Istream& Foam::operator>>(Foam::Istream&, Foam::doubleScalar&)
+    in file lnInclude/Scalar.C at line 93.
+
+FOAM exiting

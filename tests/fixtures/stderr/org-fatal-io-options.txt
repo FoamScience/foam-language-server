@@ -1,0 +1,19 @@
+--> FOAM FATAL IO ERROR:
+Unknown ddtScheme type steadyStat
+
+Valid ddtScheme types are :
+
+4
+(
+CrankNicolson
+Euler
+backward
+steadyState
+)
+
+file: /home/user/cavity/system/fvSchemes.ddtSchemes.default at line 26.
+
+    From function Foam::tmp<Foam::fv::ddtScheme<Type> > Foam::fv::ddtScheme<Type>::New(const Foam::fvMesh&, Foam::Istream&) [with Type = double]
+    in file finiteVolume/ddtSchemes/ddtScheme/ddtScheme.C at line 45.
+
+FOAM exiting

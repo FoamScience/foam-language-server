@@ -7,6 +7,7 @@
 import { DocumentUri, TextDocument } from 'vscode-languageserver-textdocument';
 import { Position, Range, Diagnostic, TextEdit, FormattingOptions, TextDocumentIdentifier } from 'vscode-languageserver-types';
 import { Validator } from './foamValidator';
+export type { SolverRunner } from './foamValidator';
 
 import * as TreeParser from 'tree-sitter';
 
@@ -42,8 +43,15 @@ export interface ValidatorSettings {
 
 // Validates the whole workspace (case)
 // and returns the resulting array of diagnostics with corresponding URIs
-export function validate(content: string, parser: TreeParser, settings?: ValidatorSettings): [TextDocumentIdentifier[], Diagnostic[]] {
+export function validate(content: string, parser: TreeParser, settings?: ValidatorSettings, tree?: TreeParser.Tree): [TextDocumentIdentifier[], Diagnostic[]] {
     const document = TextDocument.create("", "", 0, content);
     const validator = new Validator(parser, settings);
     return validator.validate(document);
+}
+
+// Async solver-based diagnostics for the case the document belongs to
+export function validateWithSolver(uri: DocumentUri, content: string, parser: TreeParser, settings?: ValidatorSettings): Promise<[TextDocumentIdentifier[], Diagnostic[], import('./foamValidator').ParsedError[]]> {
+    const document = TextDocument.create(uri, "foam", 0, content);
+    const validator = new Validator(parser, settings);
+    return validator.validateWithSolver(document);
 }

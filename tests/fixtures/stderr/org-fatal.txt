@@ -1,0 +1,15 @@
+--> FOAM FATAL ERROR:
+Continuity error cannot be removed by adjusting the outflow.
+Please check the velocity boundary conditions and/or run potentialFoam to initialise the outflow.
+Total flux              : 0
+Specified mass inflow   : 4.5e-05
+Specified mass outflow  : 0
+Adjustable mass outflow : 0
+
+    From function Foam::adjustPhi(Foam::surfaceScalarField&, const Foam::volVectorField&, Foam::volScalarField&)
+    in file cfdTools/general/adjustPhi/adjustPhi.C at line 107.
+
+FOAM aborting
+
+#0  Foam::error::printStack(Foam::Ostream&) addr2line failed
+#1  Foam::error::abort() addr2line failed
