@@ -92,6 +92,19 @@
     },
     "maxDeltaT": {
       "doc": "Upper bound on the adapted time step."
+    },
+    "graphFormat": {
+      "doc": "Output format for function object graphs.",
+      "values": ["raw", "gnuplot", "xmgr", "jplot"]
+    },
+    "OptimisationSwitches": {
+      "doc": "Compiler optimization level and related switches."
+    },
+    "DebugSwitches": {
+      "doc": "Debug output control flags."
+    },
+    "infoSwitches": {
+      "doc": "Information output level control."
     }
   },
   "fvSchemes": {
@@ -119,6 +132,16 @@
     },
     "default": {
       "doc": "Fallback scheme applied when no specific entry matches."
+    },
+    "wallDist": {
+      "doc": "Wall distance calculation method."
+    },
+    "method": {
+      "doc": "Wall distance computation method (meshWave or Poisson).",
+      "values": ["meshWave", "Poisson"]
+    },
+    "fluxRequired": {
+      "doc": "Specifies which fields require explicit flux definitions."
     }
   },
   "fvSolution": {
@@ -163,6 +186,38 @@
     },
     "residualControl": {
       "doc": "Convergence criteria for SIMPLE/PIMPLE outer loops."
+    },
+    "nOuterCorrectors": {
+      "doc": "Number of outer loop corrector iterations in PIMPLE."
+    },
+    "momentumPredictor": {
+      "doc": "Perform momentum prediction step before pressure correction.",
+      "values": ["yes", "no"]
+    },
+    "pRefCell": {
+      "doc": "Reference cell for pressure normalization."
+    },
+    "pRefValue": {
+      "doc": "Reference pressure value at pRefCell."
+    },
+    "minIter": {
+      "doc": "Minimum iterations per time step for solvers."
+    },
+    "maxIter": {
+      "doc": "Maximum iterations per time step for solvers."
+    },
+    "cacheAgglomeration": {
+      "doc": "Cache agglomerated matrix for GAMG acceleration.",
+      "values": ["yes", "no"]
+    },
+    "nPreSweeps": {
+      "doc": "Number of pre-smoothing sweeps in GAMG."
+    },
+    "nPostSweeps": {
+      "doc": "Number of post-smoothing sweeps in GAMG."
+    },
+    "mergeLevels": {
+      "doc": "Number of matrix levels merged in GAMG hierarchy."
     }
   },
   "blockMeshDict": {
@@ -199,6 +254,32 @@
     },
     "preservePatches": {
       "doc": "Patches to keep on a single processor (e.g. cyclics)."
+    },
+    "simpleCoeffs": {
+      "doc": "Coefficients for simple decomposition method."
+    },
+    "n": {
+      "doc": "Number of subdomains in each direction (x y z)."
+    },
+    "order": {
+      "doc": "Domain ordering in axis-aligned decomposition.",
+      "values": ["xyz", "xzy", "yxz", "yzx", "zxy", "zyx"]
+    },
+    "delta": {
+      "doc": "Overlap factor for simple decomposition."
+    },
+    "hierarchicalCoeffs": {
+      "doc": "Coefficients for hierarchical decomposition method."
+    },
+    "scotchCoeffs": {
+      "doc": "Coefficients for Scotch graph decomposition method."
+    },
+    "distributed": {
+      "doc": "Distribute decomposition across processors during writing.",
+      "values": ["yes", "no"]
+    },
+    "roots": {
+      "doc": "Preferred root processor indices for decomposition."
     }
   },
   "transportProperties": {
@@ -214,6 +295,32 @@
     "simulationType": {
       "doc": "Turbulence modelling framework.",
       "values": ["laminar", "RAS", "LES"]
+    },
+    "RAS": {
+      "doc": "Settings for Reynolds-Averaged Navier-Stokes turbulence modelling."
+    },
+    "LES": {
+      "doc": "Settings for Large-Eddy Simulation turbulence modelling."
+    },
+    "RASModel": {
+      "doc": "Reynolds-Averaged Navier-Stokes turbulence model.",
+      "values": ["kEpsilon", "kOmega", "kOmegaSST", "realizableKE", "RNGkEpsilon", "SpalartAllmaras", "laminar"]
+    },
+    "LESModel": {
+      "doc": "Large-Eddy Simulation sub-grid turbulence model.",
+      "values": ["Smagorinsky", "kEqn", "WALE", "dynamicKEqn"]
+    },
+    "turbulence": {
+      "doc": "Enable or disable turbulence modelling.",
+      "values": ["on", "off"]
+    },
+    "printCoeffs": {
+      "doc": "Print turbulence model coefficients at each time step.",
+      "values": ["on", "off"]
+    },
+    "delta": {
+      "doc": "Sub-grid length scale calculation method for LES.",
+      "values": ["cubeRootVol", "vanDriest", "smooth"]
     }
   },
   "boundaryField": {
@@ -225,6 +332,177 @@
         "fixedGradient", "cyclic", "wedge", "totalPressure",
         "pressureInletOutletVelocity", "movingWallVelocity"
       ]
+    },
+    "inletValue": {
+      "doc": "Value used on inflow for inletOutlet boundary condition."
+    },
+    "freestreamValue": {
+      "doc": "Freestream value for inletOutlet-type boundary conditions."
+    },
+    "refValue": {
+      "doc": "Reference value for mixed boundary conditions."
+    },
+    "refGradient": {
+      "doc": "Reference gradient for mixed boundary conditions."
+    },
+    "valueFraction": {
+      "doc": "Weighting factor between value and gradient in mixed boundary conditions."
+    },
+    "gradient": {
+      "doc": "Gradient value for fixedGradient boundary conditions."
+    },
+    "uniformValue": {
+      "doc": "Uniform value for boundary condition."
+    },
+    "phi": {
+      "doc": "Name of the flux field used by the boundary condition (default: phi)."
+    },
+    "rho": {
+      "doc": "Name of the density field for compressible flows."
+    },
+    "gamma": {
+      "doc": "Blending factor for stability in inlet boundary conditions."
+    },
+    "p0": {
+      "doc": "Reference pressure for totalPressure boundary condition."
+    },
+    "U": {
+      "doc": "Velocity field name or value in boundary conditions."
+    }
+  },
+  "snappyHexMeshDict": {
+    "castellatedMesh": {
+      "doc": "Enable castellated mesh generation from CAD geometry.",
+      "values": ["yes", "no", "true", "false"]
+    },
+    "snap": {
+      "doc": "Enable snapping of mesh to surface features.",
+      "values": ["yes", "no", "true", "false"]
+    },
+    "addLayers": {
+      "doc": "Enable addition of boundary layers near surfaces.",
+      "values": ["yes", "no", "true", "false"]
+    },
+    "geometry": {
+      "doc": "Surface geometry definitions for meshing."
+    },
+    "castellatedMeshControls": {
+      "doc": "Parameters controlling the castellated mesh generation."
+    },
+    "maxLocalCells": {
+      "doc": "Maximum number of cells per CPU-local processor before subdivision."
+    },
+    "maxGlobalCells": {
+      "doc": "Maximum number of cells in the mesh (stop if exceeded)."
+    },
+    "minRefinementCells": {
+      "doc": "Minimum number of cells to refine before splitting into branches."
+    },
+    "nCellsBetweenLevels": {
+      "doc": "Number of buffer cells between refinement levels."
+    },
+    "features": {
+      "doc": "Feature edge extraction settings and file references."
+    },
+    "refinementSurfaces": {
+      "doc": "Surface-based mesh refinement regions."
+    },
+    "refinementRegions": {
+      "doc": "Domain region-based mesh refinement zones."
+    },
+    "locationInMesh": {
+      "doc": "Point inside the mesh region to be refined (inside domain)."
+    },
+    "allowFreeStandingZoneFaces": {
+      "doc": "Allow zone faces not covered by surface (for multi-region meshes).",
+      "values": ["yes", "no", "true", "false"]
+    },
+    "snapControls": {
+      "doc": "Parameters controlling the surface snapping phase."
+    },
+    "nSmoothPatch": {
+      "doc": "Number of mesh smoothing iterations on patches during snapping."
+    },
+    "tolerance": {
+      "doc": "Relative distance tolerance for snapping to surface."
+    },
+    "nSolveIter": {
+      "doc": "Number of iterations of the surface solver during snapping."
+    },
+    "nRelaxIter": {
+      "doc": "Number of relaxation iterations during snapping."
+    },
+    "addLayersControls": {
+      "doc": "Parameters controlling the boundary layer addition phase."
+    },
+    "relativeSizes": {
+      "doc": "Interpret layer thickness relative to local cell size.",
+      "values": ["yes", "no", "true", "false"]
+    },
+    "expansionRatio": {
+      "doc": "Growth ratio of boundary layer thickness from wall outward."
+    },
+    "finalLayerThickness": {
+      "doc": "Thickness of the outermost layer in the boundary layer stack."
+    },
+    "minThickness": {
+      "doc": "Minimum thickness for boundary layers (stop if not achievable)."
+    },
+    "nGrow": {
+      "doc": "Number of layers of cells to grow into the domain."
+    },
+    "featureAngle": {
+      "doc": "Angle threshold in degrees for detecting edges as feature lines."
+    },
+    "nRelaxIter": {
+      "doc": "Number of smoothing iterations on layer normals."
+    },
+    "nSmoothSurfaceNormals": {
+      "doc": "Number of smoothing iterations on patch-face normals."
+    },
+    "layers": {
+      "doc": "Boundary layer specifications per patch."
+    },
+    "meshQualityControls": {
+      "doc": "Parameters controlling mesh quality constraints."
+    },
+    "maxNonOrtho": {
+      "doc": "Maximum non-orthogonality angle in degrees."
+    },
+    "maxBoundarySkewness": {
+      "doc": "Maximum skewness of boundary-layer faces."
+    },
+    "maxInternalSkewness": {
+      "doc": "Maximum skewness of internal faces."
+    },
+    "maxConcave": {
+      "doc": "Maximum concavity of faces in degrees."
+    },
+    "minVol": {
+      "doc": "Minimum cell volume (relative to bounding box)."
+    },
+    "minTetQuality": {
+      "doc": "Minimum quality of tetrahedral elements."
+    }
+  },
+  "setFieldsDict": {
+    "defaultFieldValues": {
+      "doc": "Default field values applied to the entire domain."
+    },
+    "regions": {
+      "doc": "Region-specific field value assignments."
+    },
+    "boxToCell": {
+      "doc": "Select cells within an axis-aligned box."
+    },
+    "sphereToCell": {
+      "doc": "Select cells within a sphere."
+    },
+    "cylinderToCell": {
+      "doc": "Select cells within a cylinder."
+    },
+    "zoneToCell": {
+      "doc": "Select cells belonging to a named zone."
     }
   }
 }
