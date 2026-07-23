@@ -24,7 +24,7 @@ import { uriToFilePath } from 'vscode-languageserver/lib/node/files';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { DocumentCache } from './foamfile-language-service/documentCache';
 import { SyntaxValidator } from './foamfile-utils/syntaxValidator';
-import { ValidatorSettings, ValidationSeverity } from './foamfile-utils/main';
+import { CustomErrorRule, ValidatorSettings, ValidationSeverity } from './foamfile-utils/main';
 import { CommandIds, FoamLanguageServiceFactory } from './foamfile-language-service/main';
 import { reconcileSolverTargets } from './solverTargets';
 
@@ -282,6 +282,10 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
 	    			triggerCharacters: [
 	    				'$',
 	    				'#',
+	    				// "press space/tab after a keyword" fires value
+	    				// completion in clients that only complete on triggers
+	    				' ',
+	    				'\t',
 	    			]
 	    		},
 	    		executeCommandProvider: applyEditSupport ? {
@@ -352,14 +356,21 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
 function convertValidatorConfiguration(config: ValidatorConfiguration): ValidatorSettings {
 	let fatalError = ValidationSeverity.ERROR;
 	let fatalIOError = ValidationSeverity.WARNING;
+	let warning = ValidationSeverity.WARNING;
 	if (config) {
 		fatalError = getSeverity(config.fatalError);
 		fatalIOError = getSeverity(config.fatalIOError);
+		warning = getSeverity(config.warning) ?? ValidationSeverity.WARNING;
 	}
 	return {
         rootUri,
 		fatalError,
 		fatalIOError,
+		warning,
+		customRules: Array.isArray(config?.customRules) ? config.customRules : undefined,
+		utilities: Array.isArray(config?.utilities)
+			? config.utilities.filter(u => typeof u === 'string')
+			: undefined,
 	};
 }
 
@@ -417,11 +428,18 @@ function validateTextDocument(textDocument: TextDocument): void {
 interface ValidatorConfiguration {
 	fatalError?: string,
 	fatalIOError?: string,
+	warning?: string,
+	// extra parse rules for custom solver/utility output
+	customRules?: CustomErrorRule[],
+	// utilities (e.g. "checkMesh") run against a scratch copy of the case
+	utilities?: string[],
 }
 
 interface CompletionConfiguration {
 	// active banana trick: opt-in, off by default (see foamBananaTrick.ts)
 	bananaTrick?: boolean,
+	// insert FoamExtend absolute macro paths ($:name): opt-in, off by default
+	absoluteMacroPaths?: boolean,
 }
 
 interface Settings {
@@ -435,6 +453,7 @@ interface Settings {
 
 function applyCompletionConfiguration(config: CompletionConfiguration | null | undefined): void {
 	service.setBananaTrick(!!(config && config.bananaTrick));
+	service.setAbsoluteMacroPaths(!!(config && config.absoluteMacroPaths));
 }
 
 function refreshCompletionConfiguration(): void {

@@ -1,0 +1,27 @@
+
+
+--> FOAM FATAL IO ERROR: 
+Unknown ddt scheme banana
+
+Valid ddt schemes are :
+
+8
+(
+CoEuler
+CrankNicolson
+Euler
+SLTS
+backward
+bounded
+localEuler
+steadyState
+)
+
+
+file: /CASE_ROOT/system/fvSchemes/ddtSchemes/default at line 19.
+
+    From function static Foam::tmp<Foam::fv::ddtScheme<Type> > Foam::fv::ddtScheme<Type>::New(const Foam::fvMesh&, Foam::Istream&) [with Type = Foam::Vector<double>]
+    in file /home/ubuntu/OpenFOAM/OpenFOAM-12/src/finiteVolume/lnInclude/ddtScheme.C at line 73.
+
+FOAM exiting
+

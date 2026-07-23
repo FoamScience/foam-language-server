@@ -45,9 +45,11 @@ export class FoamAssist {
     // active banana trick: dict path (joined with '/') -> options already
     // harvested for this uri
     private bananaOptions: Map<string, string[]>;
+    // macro completion inserts the FoamExtend absolute-path marker ($:name)
+    private absoluteMacroPaths: boolean;
 
     // Assist in proposing completion items
-    constructor(document: TextDocument, completionItemCapabilities: CompletionItemCapabilities, parser : TreeParser, index?: FoamWorkspaceIndex, solverOptions?: string[], probeCallback?: (dictPath: string[]) => void, bananaOptions?: Map<string, string[]>) {
+    constructor(document: TextDocument, completionItemCapabilities: CompletionItemCapabilities, parser : TreeParser, index?: FoamWorkspaceIndex, solverOptions?: string[], probeCallback?: (dictPath: string[]) => void, bananaOptions?: Map<string, string[]>, absoluteMacroPaths?: boolean) {
         this.document = document;
         this.deprecatedSupport = completionItemCapabilities && completionItemCapabilities.deprecatedSupport;
         this.snippetSupport = completionItemCapabilities && completionItemCapabilities.snippetSupport;
@@ -57,6 +59,7 @@ export class FoamAssist {
         this.solverOptions = solverOptions ?? [];
         this.probeCallback = probeCallback;
         this.bananaOptions = bananaOptions ?? new Map();
+        this.absoluteMacroPaths = absoluteMacroPaths ?? false;
     }
 
     // A Text edit for a completion item
@@ -128,13 +131,23 @@ export class FoamAssist {
         // Macro expansion, suggests all possible variables in this dict
         // (and, workspace-wide, referable symbols from the index)
         if (word && word.startsWith('$')) {
+            // Replace only what was typed after the '$' — leaving the '$'
+            // itself out of the range keeps clients from disagreeing about
+            // whether '$' belongs to the word being completed (issue #12)
+            const macroRange = Range.create(
+                this.document.positionAt(this.document.offsetAt(position) - (word.length - 1)),
+                position
+            );
+            // ':' marks an absolute path in FoamExtend, hence opt-in
+            const macroEdit = (name: string): TextEdit =>
+                TextEdit.replace(macroRange, (this.absoluteMacroPaths ? ":" : "") + name);
             const seen = new Set<string>();
             for (let entry of foamSymbols.traverseSymbolTree(tree, {uri: this.document.uri}, false)) {
                 seen.add(entry.name);
                 proposals.push({
 			    	label: entry.name,
 			    	kind: CompletionItemKind.Variable,
-                    insertText: ":"+entry.name
+                    textEdit: macroEdit(entry.name)
                 });
             }
             if (this.index) {
@@ -145,7 +158,7 @@ export class FoamAssist {
                             label: target.name,
                             kind: CompletionItemKind.Variable,
                             detail: "workspace",
-                            insertText: ":" + target.name
+                            textEdit: macroEdit(target.name)
                         });
                     }
                 }

@@ -137,6 +137,37 @@ describe('active banana trick: probe mechanics', () => {
         assert.deepStrictEqual(options, ['CrankNicolson', 'Euler', 'backward', 'steadyState']);
     });
 
+    test('keyword absent from the saved file gets a synthesized "<keyword> banana;" entry', async () => {
+        // issue #3's actual scenario: the user just typed a keyword that
+        // is not in the on-disk file yet, so there is no value node to
+        // splice over — the probe must synthesize a complete entry inside
+        // the enclosing dict of the scratch copy
+        const parser = newParser();
+        const index = new FoamWorkspaceIndex(parser);
+        index.initialize('file://' + CAVITY);
+        const before = snapshot(CAVITY);
+        const trick = new FoamBananaTrick(parser, async () => fixtureStderr());
+
+        const writes = new Map();
+        const originalWrite = fs.promises.writeFile;
+        fs.promises.writeFile = (target, content, ...rest) => {
+            writes.set(target, content);
+            return originalWrite.call(fs.promises, target, content, ...rest);
+        };
+        let options;
+        try {
+            options = await trick.probe(FVSCHEMES_URI, ['ddtSchemes', 'phantomKeyword'], index);
+        } finally {
+            fs.promises.writeFile = originalWrite;
+        }
+
+        assert.deepStrictEqual(options, ['CrankNicolson', 'Euler', 'backward', 'steadyState']);
+        const scratchContents = [...writes.values()].filter(c => typeof c === 'string');
+        assert.ok(scratchContents.some(c => c.includes('phantomKeyword banana;')),
+            'the scratch fvSchemes must contain a complete, well-formed entry');
+        assert.deepStrictEqual(snapshot(CAVITY), before, 'the fixture must be untouched after the probe');
+    });
+
     test('missing dict path resolves to no options instead of throwing', async () => {
         const parser = newParser();
         const index = new FoamWorkspaceIndex(parser);
@@ -144,6 +175,29 @@ describe('active banana trick: probe mechanics', () => {
         const trick = new FoamBananaTrick(parser, async () => fixtureStderr());
         const options = await trick.probe(FVSCHEMES_URI, ['noSuchDict', 'noSuchKey'], index);
         assert.deepStrictEqual(options, []);
+    });
+});
+
+describe('passive harvest: options scoped to the dict path the error names', () => {
+    test('a harvested list is offered at its dict path and nowhere else in the file', async () => {
+        const service = await newService();
+        // org-fatal-io-options names file .../fvSchemes.ddtSchemes.default,
+        // so its options must be scoped to ddtSchemes/default
+        const errorUri = 'file:///home/user/cavity/system/fvSchemes';
+        await service.validateWithSolver(FVSCHEMES_URI, '', undefined, async () => fixtureStderr());
+
+        const content =
+            'FoamFile\n{\n    object fvSchemes;\n}\n\n' +
+            'ddtSchemes\n{\n    default st;\n}\n\n' +
+            'gradSchemes\n{\n    default st;\n}\n';
+        const ddtProps = await service.computeCompletionItems(content, posAtEnd(content, 'default st'), undefined, errorUri);
+        assert.ok(ddtProps.some(p => p.detail === 'from solver' && p.label === 'steadyState'),
+            'options must be offered at the dict path the solver error named');
+
+        const gradPos = posAtEnd(content, 'default st', content.indexOf('gradSchemes'));
+        const gradProps = await service.computeCompletionItems(content, gradPos, undefined, errorUri);
+        assert.strictEqual(gradProps.filter(p => p.detail === 'from solver').length, 0,
+            'gradSchemes/default must not inherit ddtSchemes/default options');
     });
 });
 

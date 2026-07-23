@@ -29,6 +29,17 @@ export enum ValidationSeverity {
     ERROR
 }
 
+// A user-supplied parse rule for custom solver/utility output. pattern is
+// a RegExp source, compiled with the 'gm' flags; its named capture groups
+// feed the diagnostic: message, file (may carry OpenFOAM's dotted dict
+// path suffix), line, endLine, options (whitespace-separated valid entries)
+export interface CustomErrorRule {
+    // shown as the diagnostic's code; defaults to "custom-rule"
+    name?: string;
+    pattern: string;
+    severity?: 'error' | 'warning' | 'info' | 'hint';
+}
+
 // Validator configuration
 export interface ValidatorSettings {
     // Root workspace directory
@@ -39,11 +50,22 @@ export interface ValidatorSettings {
 
     // Setting for flagging FATAL IO ERRORs
     fatalIOError?: ValidationSeverity;
+
+    // Setting for flagging FOAM Warnings
+    warning?: ValidationSeverity;
+
+    // Extra parse rules for custom solver/utility output
+    customRules?: CustomErrorRule[];
+
+    // Utilities (e.g. "checkMesh") to run besides the case's solver; they
+    // run against a scratch copy of the case, never the user's files
+    utilities?: string[];
 }
 
-// Async solver-based diagnostics for the case the document belongs to
-export function validateWithSolver(uri: DocumentUri, content: string, parser: TreeParser, settings?: ValidatorSettings): Promise<[TextDocumentIdentifier[], Diagnostic[], import('./foamValidator').ParsedError[]]> {
+// Async solver-based diagnostics for the case the document belongs to.
+// solverRunner is test-only injection; production uses the real spawn-based one.
+export function validateWithSolver(uri: DocumentUri, content: string, parser: TreeParser, settings?: ValidatorSettings, solverRunner?: import('./foamValidator').SolverRunner): Promise<[TextDocumentIdentifier[], Diagnostic[], import('./foamValidator').ParsedError[]]> {
     const document = TextDocument.create(uri, "foam", 0, content);
-    const validator = new Validator(parser, settings);
+    const validator = new Validator(parser, settings, solverRunner);
     return validator.validateWithSolver(document);
 }

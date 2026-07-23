@@ -1,0 +1,16 @@
+
+
+--> FOAM FATAL IO ERROR: (openfoam-2412 patch=260127)
+Unknown ddt type banana
+
+Valid ddt types :
+8(CoEuler CrankNicolson Euler SLTS backward bounded localEuler steadyState)
+
+
+file: system/fvSchemes/ddtSchemes/default at line 19.
+
+    From static Foam::tmp<Foam::fv::ddtScheme<Type> > Foam::fv::ddtScheme<Type>::New(const Foam::fvMesh&, Foam::Istream&) [with Type = Foam::Vector<double>]
+    in file ./src/finiteVolume/lnInclude/ddtScheme.C at line 75.
+
+FOAM exiting
+

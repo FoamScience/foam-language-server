@@ -155,13 +155,19 @@ export interface FoamLanguageService {
 
     computeInlayHints(content: string, range: Range, tree?: TreeParser.Tree): InlayHint[];
 
-    validateWithSolver(uri: string, content: string, settings?: ValidatorSettings): Promise<[TextDocumentIdentifier[], Diagnostic[]]>;
+    validateWithSolver(uri: string, content: string, settings?: ValidatorSettings, solverRunner?: SolverRunner): Promise<[TextDocumentIdentifier[], Diagnostic[]]>;
 
     /**
      * Opts into the active banana trick (off by default). solverRunner is
      * test-only injection point for the solver process layer.
      */
     setBananaTrick(enabled: boolean, solverRunner?: SolverRunner): void;
+
+    /**
+     * Opts into FoamExtend's absolute macro paths (off by default): macro
+     * completion then inserts $:name instead of $name.
+     */
+    setAbsoluteMacroPaths(enabled: boolean): void;
 
     setLogger(logger: ILogger): void;
     setTreeParser(): Promise<void>;

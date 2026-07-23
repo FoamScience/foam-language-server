@@ -17,7 +17,7 @@ function newParser() {
     return parser;
 }
 
-function assist(content, uri, withIndex = true, solverOptions = []) {
+function assist(content, uri, withIndex = true, solverOptions = [], absoluteMacroPaths = false) {
     const parser = newParser();
     let index = null;
     if (withIndex) {
@@ -25,7 +25,7 @@ function assist(content, uri, withIndex = true, solverOptions = []) {
         index.initialize('file://' + CAVITY);
     }
     const document = lsp.TextDocument.create(uri ?? '', 'foam', 0, content);
-    return new FoamAssist(document, [], parser, index, solverOptions);
+    return new FoamAssist(document, [], parser, index, solverOptions, undefined, undefined, absoluteMacroPaths);
 }
 
 function posAtEnd(content, needle) {
@@ -80,6 +80,36 @@ describe('context-aware completion', () => {
         const props = a.computeProposals(posAtEnd(content, '$s'));
         const labels = props.map(p => p.label);
         assert.ok(labels.includes('solver.endTime'));
+    });
+
+    test('macro completion replaces only the text typed after $', () => {
+        const content = 'FoamFile\n{\n    object controlDict;\n}\n\nendTime  $s\n';
+        const a = assist(content, 'file://' + path.join(CAVITY, 'system/controlDict'));
+        const pos = posAtEnd(content, '$s');
+        const item = a.computeProposals(pos).find(p => p.label === 'solver.endTime');
+        assert.ok(item.textEdit, 'macro items must state their replace range');
+        assert.strictEqual(item.insertText, undefined);
+        assert.strictEqual(item.textEdit.newText, 'solver.endTime');
+        // range covers "s" only, the '$' stays untouched
+        assert.deepStrictEqual(item.textEdit.range.start, { line: pos.line, character: pos.character - 1 });
+        assert.deepStrictEqual(item.textEdit.range.end, pos);
+    });
+
+    test('in-file macro symbols get the same replace range', () => {
+        const content = 'FoamFile\n{\n    object controlDict;\n}\n\nendTime 1;\nstopAt $e\n';
+        const a = assist(content, 'file:///case/system/controlDict', false);
+        const pos = posAtEnd(content, '$e');
+        const item = a.computeProposals(pos).find(p => p.label === 'endTime');
+        assert.ok(item);
+        assert.strictEqual(item.textEdit.newText, 'endTime');
+        assert.deepStrictEqual(item.textEdit.range.start, { line: pos.line, character: pos.character - 1 });
+    });
+
+    test('absoluteMacroPaths prepends the FoamExtend : marker', () => {
+        const content = 'FoamFile\n{\n    object controlDict;\n}\n\nendTime 1;\nstopAt $e\n';
+        const a = assist(content, 'file:///case/system/controlDict', false, [], true);
+        const item = a.computeProposals(posAtEnd(content, '$e')).find(p => p.label === 'endTime');
+        assert.strictEqual(item.textEdit.newText, ':endTime');
     });
 
     test('solver-harvested options rank first in value position', () => {

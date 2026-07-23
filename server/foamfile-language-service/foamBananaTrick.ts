@@ -17,24 +17,24 @@ import * as os from 'os';
 import * as TreeParser from 'tree-sitter';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { Validator, SolverRunner } from '../foamfile-utils/foamValidator';
+import { ValidatorSettings } from '../foamfile-utils/main';
+import { copyCaseSkeleton } from '../foamfile-utils/scratchCase';
 import { FoamWorkspaceIndex } from './foamWorkspaceIndex';
 import { findDictPath } from './foamCase';
 const path = require('path');
-
-// case sub-trees worth copying into the scratch probe dir, mirroring
-// FoamWorkspaceIndex's walk/skip rules
-const MAX_FILE_SIZE = 1024 * 1024;
-const SKIPPED_DIRS = new Set(['postProcessing', 'dynamicCode', 'polyMesh.bak', 'VTK']);
-const INDEXED_TOPDIRS = /^(0.*|constant|system)$/;
 
 export class FoamBananaTrick {
 
     private parser: TreeParser;
     private solverRunner?: SolverRunner;
+    // the user's diagnostics settings, so custom "Valid options" rules
+    // feed completion exactly like they feed diagnostics
+    private settings?: ValidatorSettings;
 
-    constructor(parser: TreeParser, solverRunner?: SolverRunner) {
+    constructor(parser: TreeParser, solverRunner?: SolverRunner, settings?: ValidatorSettings) {
         this.parser = parser;
         this.solverRunner = solverRunner;
+        this.settings = settings;
     }
 
     /*
@@ -50,8 +50,8 @@ export class FoamBananaTrick {
         if (!root || !file) {
             return [];
         }
-        const valueNode = findDictPath(file.tree.rootNode, dictPath);
-        if (!valueNode) {
+        const bananaContent = this.spliceBanana(file.tree.rootNode, file.content, dictPath);
+        if (bananaContent === null) {
             return [];
         }
         const relPath = path.relative(root, uri.replace(/^file:\/\//, ''));
@@ -61,16 +61,17 @@ export class FoamBananaTrick {
 
         const scratchDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'foam-banana-'));
         try {
-            await this.copyCaseSkeleton(root, scratchDir);
+            await copyCaseSkeleton(root, scratchDir);
 
-            const bananaContent = file.content.slice(0, valueNode.startIndex)
-                + 'banana'
-                + file.content.slice(valueNode.endIndex);
             const scratchFile = path.join(scratchDir, relPath);
             await fsp.mkdir(path.dirname(scratchFile), { recursive: true });
             await fsp.writeFile(scratchFile, bananaContent);
 
-            const validator = new Validator(this.parser, { rootUri: 'file://' + scratchDir }, this.solverRunner);
+            // probes only ever run the solver: utilities would multiply
+            // process spawns without ever printing a "Valid options" list
+            const validator = new Validator(this.parser,
+                { ...(this.settings ?? {}), rootUri: 'file://' + scratchDir, utilities: undefined },
+                this.solverRunner);
             const document = TextDocument.create('file://' + scratchFile, 'foam', 0, bananaContent);
             const [, , errors] = await validator.validateWithSolver(document);
             for (const error of errors) {
@@ -84,55 +85,40 @@ export class FoamBananaTrick {
         }
     }
 
-    // ponytail: binary files (e.g. binary-format mesh geometry) are skipped
-    // wholesale rather than copied verbatim, so probes against binary-mesh
-    // cases degrade to no options; copy raw bytes instead if that bites
-    private async copyCaseSkeleton(root: string, dest: string): Promise<void> {
-        let names: string[];
-        try {
-            names = await fsp.readdir(root);
-        } catch {
-            return;
+    /*
+        What the scratch copy of the probed file should contain. Three
+        shapes, by what the saved file holds for dictPath's last segment:
+        - a value: overwrite it with "banana" (the classic trick)
+        - the bare keyword, no value: overwrite the entry with a complete
+          "<keyword> banana;"
+        - nothing at all (the user is still typing the keyword): append
+          "<keyword> banana;" to the enclosing dict
+        The mutation only ever lands in the scratch copy, so it can always
+        be a well-formed entry — no "when to add ;" dilemma (issue #3).
+        null when even the enclosing dict is missing from the saved file.
+    */
+    private spliceBanana(root: TreeParser.SyntaxNode, content: string, dictPath: string[]): string | null {
+        const node = findDictPath(root, dictPath);
+        const entry = `${dictPath[dictPath.length - 1]} banana;`;
+        if (node && node.type !== 'key_value') {
+            return content.slice(0, node.startIndex) + 'banana' + content.slice(node.endIndex);
         }
-        for (const name of names) {
-            if (INDEXED_TOPDIRS.test(name) && !name.startsWith('processor')) {
-                await this.copyDir(path.join(root, name), path.join(dest, name));
+        if (node) {
+            // findDictPath handed back the key_value itself: no value node
+            return content.slice(0, node.startIndex) + entry + content.slice(node.endIndex);
+        }
+        let insertAt = content.length;
+        if (dictPath.length > 1) {
+            const dict = findDictPath(root, dictPath.slice(0, -1));
+            if (!dict) {
+                return null;
             }
+            // insert at the end of the dict's entry list, before its '}'
+            const cores = dict.type === 'dict'
+                ? dict.namedChildren.filter(c => c.type === 'dict_core')
+                : [dict];
+            insertAt = cores.length > 0 ? cores[cores.length - 1].endIndex : dict.endIndex - 1;
         }
-    }
-
-    private async copyDir(srcDir: string, destDir: string): Promise<void> {
-        let entries;
-        try {
-            entries = await fsp.readdir(srcDir, { withFileTypes: true });
-        } catch {
-            return;
-        }
-        for (const entry of entries) {
-            const src = path.join(srcDir, entry.name);
-            if (entry.isDirectory()) {
-                if (!SKIPPED_DIRS.has(entry.name) && !entry.name.startsWith('processor')) {
-                    await this.copyDir(src, path.join(destDir, entry.name));
-                }
-            } else if (entry.isFile()) {
-                await this.copyFile(src, path.join(destDir, entry.name));
-            }
-        }
-    }
-
-    private async copyFile(src: string, dest: string): Promise<void> {
-        try {
-            if ((await fsp.stat(src)).size > MAX_FILE_SIZE) {
-                return;
-            }
-            const content = await fsp.readFile(src, 'utf-8');
-            if (content.includes('\0') || /format\s+binary/.test(content.slice(0, 2048))) {
-                return;
-            }
-            await fsp.mkdir(path.dirname(dest), { recursive: true });
-            await fsp.writeFile(dest, content);
-        } catch {
-            // unreadable file: not copied
-        }
+        return content.slice(0, insertAt) + '\n' + entry + '\n' + content.slice(insertAt);
     }
 }

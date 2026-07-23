@@ -42,8 +42,15 @@ export class LanguageService implements FoamLanguageService {
     private hoverContentFormat: MarkupKind[];
     private completionItemCapabilities: CompletionItemCapabilities;
     private workspaceIndex: FoamWorkspaceIndex | null = null;
-    // per-uri "Valid options" lists harvested from solver errors
+    // per-uri "Valid options" lists harvested from solver errors that
+    // didn't name a dict entry; offered file-wide as a fallback
     private solverOptions: Map<string, string[]> = new Map();
+    // diagnostics settings seen last, so background banana probes apply
+    // the same custom rules as the diagnostics run
+    private lastValidatorSettings?: FoamUtils.ValidatorSettings;
+
+    // FoamExtend absolute macro paths ($:name): opt-in, off by default
+    private absoluteMacroPaths: boolean = false;
 
     // active banana trick: opt-in, off by default
     private bananaTrickEnabled: boolean = false;
@@ -123,8 +130,14 @@ export class LanguageService implements FoamLanguageService {
         const probeCallback = (this.bananaTrickEnabled && uri && this.workspaceIndex)
             ? (dictPath: string[]) => this.triggerBananaProbe(uri, dictPath)
             : undefined;
-        const foamAssist = new FoamAssist(document, this.completionItemCapabilities, this.parser, this.workspaceIndex, options, probeCallback, bananaOptions);
+        const foamAssist = new FoamAssist(document, this.completionItemCapabilities, this.parser, this.workspaceIndex, options, probeCallback, bananaOptions, this.absoluteMacroPaths);
         return foamAssist.computeProposals(position, tree);
+    }
+
+    // Opt-in: macro completion inserts FoamExtend's absolute-path marker,
+    // i.e. $:name instead of $name
+    public setAbsoluteMacroPaths(enabled: boolean): void {
+        this.absoluteMacroPaths = enabled;
     }
 
     // Opt-in active banana trick: when enabled, value completion may probe
@@ -156,7 +169,7 @@ export class LanguageService implements FoamLanguageService {
             return;
         }
         this.bananaProbeRunning = true;
-        new FoamBananaTrick(this.parser, this.bananaSolverRunner).probe(uri, dictPath, this.workspaceIndex)
+        new FoamBananaTrick(this.parser, this.bananaSolverRunner, this.lastValidatorSettings).probe(uri, dictPath, this.workspaceIndex)
             .then(options => this.cacheBananaResult(uri, pathKey, options))
             .catch(() => this.cacheBananaResult(uri, pathKey, []))
             .finally(() => { this.bananaProbeRunning = false; });
@@ -252,14 +265,21 @@ export class LanguageService implements FoamLanguageService {
         return foamInlayHints.computeInlayHints(content, range, tree);
     }
 
-    public async validateWithSolver(uri: string, content: string, settings?: FoamUtils.ValidatorSettings): Promise<[TextDocumentIdentifier[], Diagnostic[]]> {
-        const [uris, diagnostics, errors] = await FoamUtils.validateWithSolver(uri, content, this.parser, settings);
+    // solverRunner is test-only injection; production always uses the real
+    // spawn-based runner
+    public async validateWithSolver(uri: string, content: string, settings?: FoamUtils.ValidatorSettings, solverRunner?: FoamUtils.SolverRunner): Promise<[TextDocumentIdentifier[], Diagnostic[]]> {
+        this.lastValidatorSettings = settings;
+        const [uris, diagnostics, errors] = await FoamUtils.validateWithSolver(uri, content, this.parser, settings, solverRunner);
         // passive banana trick: remember "Valid options" lists from solver
-        // errors, surfaced later as value completions
-        // ponytail: keyed by target uri only; per-keyword scoping if it bites
+        // errors, surfaced later as value completions — scoped to the dict
+        // entry OpenFOAM itself named, when it named one
         for (const error of errors) {
             if (error.options && error.options.length > 0) {
-                this.solverOptions.set(error.uri ?? uri, error.options);
+                if (error.dictPath && error.dictPath.length > 0) {
+                    this.cacheBananaResult(error.uri ?? uri, error.dictPath.join('/'), error.options);
+                } else {
+                    this.solverOptions.set(error.uri ?? uri, error.options);
+                }
             }
         }
         return [uris, diagnostics];

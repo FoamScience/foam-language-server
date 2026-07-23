@@ -12,31 +12,40 @@
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { Diagnostic, DiagnosticSeverity, DiagnosticTag, Position, Range, DocumentUri, TextDocumentIdentifier } from 'vscode-languageserver-types';
-import { ValidationCode, ValidationSeverity, ValidatorSettings } from './main';
+import { CustomErrorRule, ValidationCode, ValidationSeverity, ValidatorSettings } from './main';
+import { copyCaseSkeleton } from './scratchCase';
 
 import * as TreeParser from 'tree-sitter';
 
 import { spawn } from 'child_process';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, statSync, promises as fsp } from 'fs';
+import * as os from 'os';
 var path = require('path');
 
 // Async solver runs are hard-killed on whichever comes first:
-// this timeout, a "FOAM exiting/aborting" sentinel, or the stderr cap.
+// this timeout, a "FOAM exiting/aborting" sentinel, or the output cap.
 // Without these, a *valid* case would happily run the whole simulation.
 const SOLVER_TIMEOUT_MS = 5000;
-const STDERR_CAP = 1024 * 1024;
+const OUTPUT_CAP = 1024 * 1024;
 
-// Try to figure out OpenFOAM-related env vars
-const of_fork = process.env.WM_PROJECT
-const of_version = process.env.WM_PROJECT_VERSION
-const of_compile_option = process.env.WM_COMPILE_OPTION
-const usr_libs = process.env.FOAM_USER_LIBBIN
-const usr_bins = process.env.FOAM_USER_APPBIN
+// mesh-check style complaints ("***Number of severely non-orthogonal
+// faces...") that utilities print to stdout without any FOAM banner; only
+// applied to utility output so solver diagnostics keep their exact shape
+const UTILITY_RULES: CustomErrorRule[] = [
+    { name: 'mesh-check', pattern: '^\\s*\\*\\*\\*(?<message>.+)$', severity: 'warning' },
+];
 
-// Runs a solver in `cwd` and resolves to whatever it wrote to stderr.
+const RULE_SEVERITIES: { [name: string]: DiagnosticSeverity } = {
+    error: DiagnosticSeverity.Error,
+    warning: DiagnosticSeverity.Warning,
+    info: DiagnosticSeverity.Information,
+    hint: DiagnosticSeverity.Hint,
+};
+
+// Runs a program in `cwd` and resolves to its combined stdout+stderr.
 // Defaults to Validator's own spawn-based implementation; injectable so
 // callers (the active banana trick, tests) can stub the process layer.
-export type SolverRunner = (solver: string, cwd: string) => Promise<string>;
+export type SolverRunner = (solver: string, cwd: string, args?: string[]) => Promise<string>;
 
 // A representation of an OpenFOAM error
 export class ParsedError {
@@ -47,6 +56,9 @@ export class ParsedError {
     end: number;
     options: string[];
     severity?: DiagnosticSeverity;
+    // dict entry the error names ("fvSchemes.ddtSchemes.default" ->
+    // ["ddtSchemes", "default"]), scoping any options list to it
+    dictPath?: string[];
 }
 
 export class Validator {
@@ -70,109 +82,7 @@ export class Validator {
             this.settings = settings;
         }
         this.treeParser = parser;
-        this.solverRunner = solverRunner ?? ((solver, cwd) => this.runSolverAsync(solver, cwd));
-    }
-
-    /*
-        Parses an OpenFOAM error
-        Takes:
-        - The content of stderr from OpenFOAM solvers
-        Returns:
-        - Error type
-        - The error message
-        - Start position
-        - End position
-        - Valid entries (optional) for completion
-    */
-    parseFoamError(text: string) : ParsedError {
-
-        const result = new ParsedError();
-
-        // Prepare text string (what's in stderr)
-        text = text.replace(/\r?\n/g, " ").replace(/\s+/, " ")
-
-        // Extract first file name appearning
-        const fileRegExp : RegExp = /file:?\s*([-\w\/\.\+]+)/
-        const filenames : RegExpMatchArray = text.match(fileRegExp);
-        if (filenames.length > 1) {
-            result.uri = ["file://", filenames[1]].join('');
-        }
-
-        // Parse fatal errors
-        const fatalErrorRegexp : RegExp = /FOAM FATAL ERROR/
-        let isFatalError = fatalErrorRegexp.test(text);
-        if (isFatalError)
-        {
-            // A RegExp matching most errors
-            const theRegExp : RegExp =
-                /FOAM FATAL ERROR[\s\S]*?(\w.*?)in.*?"(.*?)"[\s\S]*?line\s*(\d+).*?(?:line\s*(\d+))?.*\n*(?:[vV]alid[\s\S]*?(\d+)[\s\S]*?\(([\s\S]*?)\))?/m
-                ///FOAM FATAL IO ERROR[\s\S]*?(\w.*)[\s\S].*?(?:[vV]alid.*?(\d+))?[\s\S]*?\((.*?)\)[\s\S]*?file:\s*(.[^\s]*).*?line\s(\d+).*?(?:line (\d+).*)?FOAM exiting/m
-            const matches : RegExpMatchArray = text.match(theRegExp);
-            
-            let errType = "FOAM FATAL ERROR";
-            let message = "Couldn't parse error string";
-            let positions = ["0", "0"];
-            let options : string[];
-
-            message = matches[1];
-            if (matches[4] === undefined)
-            {
-                positions = [matches[3], matches[3]];
-            } else {
-                positions = [matches[3], matches[4]];
-            }
-
-            result.errorType = errType.toString();
-            result.message = message.toString();
-            result.start = +positions[0];
-            result.end = +positions[1];
-            result.options = options;
-            return result;
-        }
-
-        // Parse fatal IO errors
-        const fatalIOErrorRegexp : RegExp = /FOAM FATAL IO ERROR/
-        let isFatalIOError = fatalIOErrorRegexp.test(text);
-        if (isFatalIOError)
-        {
-            // A RegExp matching most IO errors
-            const theRegExp : RegExp =
-                /FOAM FATAL IO ERROR[\s\S]*?(\w.*)[\s\S].*?(?:[vV]alid.*?(\d+)[\s\S]*?\((.*?)\)[\s\S]*?)?file:\s*(.[^\s]*).*?line\s(\d+).*?(?:line (\d+).*)?FOAM exiting/m
-                ///FOAM FATAL IO ERROR[\s\S]*?(\w.*)[\s\S].*?(?:[vV]alid.*?(\d+))?[\s\S]*?\((.*?)\)[\s\S]*?file:\s*(.[^\s]*).*?line\s(\d+).*?(?:line (\d+).*)?FOAM exiting/m
-            const matches : RegExpMatchArray = text.match(theRegExp);
-            
-            let errType = "FOAM FATAL IO ERROR";
-            let message = "Couldn't parse IO error string";
-            let positions = ["0", "0"];
-            let options: string[];
-
-            if (matches.length == 7)
-            {
-                message = matches[1];
-                if (matches[6] === undefined)
-                {
-                    positions = [matches[5], matches[5]];
-                } else {
-                    positions = [matches[5], matches[6]];
-                }
-                //options = matches[3].split(/\s+/);
-            }
-            result.errorType = errType.toString();
-            result.message = message.toString();
-            result.start = +positions[0];
-            result.end = +positions[1];
-            result.options = options;
-            return result;
-        }
-
-        return {
-            uri: this.document.uri,
-            errorType: "",
-            message: "",
-            start: 0,
-            end: 0,
-            options: []
-        };
+        this.solverRunner = solverRunner ?? ((solver, cwd, args) => this.runSolverAsync(solver, cwd, args));
     }
 
     /*
@@ -181,9 +91,9 @@ export class Validator {
         fatal IO errors and warnings. Unparseable blocks degrade to a
         message-only error on line 1 — never throws.
     */
-    public parseFoamErrors(text: string): ParsedError[] {
+    public parseFoamErrors(text: string, caseRoot?: string): ParsedError[] {
         const results: ParsedError[] = [];
-        const marker = /(?:-->\s*)?FOAM (FATAL IO ERROR|FATAL ERROR|Warning)\s*:?/g;
+        const marker = /(?:-->\s*)?FOAM (FATAL IO ERROR|FATAL ERROR|IOWarning|Warning)\s*:?/g;
         const hits: { kind: string, bodyStart: number, index: number }[] = [];
         let m: RegExpExecArray;
         while ((m = marker.exec(text)) !== null) {
@@ -195,25 +105,31 @@ export class Validator {
             block = block.split(/FOAM (?:exiting|aborting)/)[0];
             // ESI puts its version tag right after the marker
             block = block.replace(/^\s*\(openfoam-[^)]*\)/, '');
-            results.push(this.parseErrorBlock(hits[i].kind, block));
+            results.push(this.parseErrorBlock(hits[i].kind, block, caseRoot));
         }
         return results;
     }
 
-    private parseErrorBlock(kind: string, block: string): ParsedError {
+    private parseErrorBlock(kind: string, block: string, caseRoot?: string): ParsedError {
         const result = new ParsedError();
+        const isWarning = kind.endsWith('Warning');
         result.errorType = kind === 'Warning' ? 'FOAM Warning' : `FOAM ${kind}`;
-        result.severity = kind === 'Warning' ? DiagnosticSeverity.Warning : DiagnosticSeverity.Error;
+        result.severity = isWarning ? DiagnosticSeverity.Warning : DiagnosticSeverity.Error;
         result.start = 1;
         result.end = 1;
         result.options = [];
 
-        // message: lines up to the first blank line, minus C++ source frames
-        const lines = block.replace(/^\n+/, '').split('\n');
+        // message: lines up to the first blank line, minus C++ source frames.
+        // Foundation leaves a trailing space after the marker's colon, so
+        // the first line is blank and the message starts one line down
+        const lines = block.split('\n');
         const messageLines: string[] = [];
         for (const line of lines) {
-            if (line.trim() === '') { break; }
-            if (/^\s*(?:From function|in file|file:)/.test(line)) { continue; }
+            if (line.trim() === '') {
+                if (messageLines.length === 0) { continue; }
+                break;
+            }
+            if (/^\s*(?:From function|From |in file|file:)/.test(line)) { continue; }
             messageLines.push(line.trim());
         }
         result.message = messageLines.join(' ').trim();
@@ -236,13 +152,7 @@ export class Validator {
             result.end = result.start;
         }
         if (file) {
-            // OpenFOAM appends the offending dictionary path to the file name
-            // with dots (".../fvSchemes.ddtSchemes.default") — strip it from
-            // the basename. ponytail: also strips real dotted basenames,
-            // which OpenFOAM case files don't have in practice
-            const dir = path.dirname(file);
-            const base = path.basename(file).split('.')[0];
-            result.uri = "file://" + path.join(dir, base);
+            this.locateFile(result, file, caseRoot);
         }
 
         // "Valid xxx types are : N ( a b c )" lists feed value completion
@@ -253,6 +163,103 @@ export class Validator {
         return result;
     }
 
+    /*
+        OpenFOAM appends the offending dictionary entry to the file name it
+        reports: current versions separate it with '/'
+        (".../fvSchemes/ddtSchemes/default"), older ones used '.'
+        (".../fvSchemes.ddtSchemes.default"). ESI also reports the path
+        relative to the case root, foundation reports it absolute.
+
+        Splitting the two apart is done by asking the filesystem where the
+        real file ends — no version sniffing. Only when nothing on disk
+        matches (unit tests, a file deleted since the run) does the dotted
+        heuristic apply.
+    */
+    private locateFile(result: ParsedError, file: string, caseRoot?: string): void {
+        const full = path.isAbsolute(file) || !caseRoot ? file : path.join(caseRoot, file);
+        const segments: string[] = [];
+        let candidate = full;
+        while (candidate) {
+            if (this.isFile(candidate)) {
+                result.uri = "file://" + candidate;
+                if (segments.length > 0) {
+                    result.dictPath = segments;
+                }
+                return;
+            }
+            const parent = path.dirname(candidate);
+            if (parent === candidate) { break; }
+            segments.unshift(path.basename(candidate));
+            candidate = parent;
+        }
+        // nothing on disk: fall back to the dotted form. ponytail: also
+        // splits real dotted basenames, which OpenFOAM case files don't
+        // have in practice
+        const parts = path.basename(full).split('.');
+        result.uri = "file://" + path.join(path.dirname(full), parts[0]);
+        if (parts.length > 1) {
+            result.dictPath = parts.slice(1);
+        }
+    }
+
+    private isFile(candidate: string): boolean {
+        try {
+            return statSync(candidate).isFile();
+        } catch {
+            return false;
+        }
+    }
+
+    /*
+        Run user-supplied (and built-in utility) rules over a program's
+        output. Each rule is one regex whose named groups fill the parsed
+        error; a bad regex degrades to a warning diagnostic instead of
+        throwing into the diagnostics path.
+    */
+    public parseWithRules(text: string, rules: CustomErrorRule[], caseRoot?: string): ParsedError[] {
+        const results: ParsedError[] = [];
+        for (const rule of rules) {
+            if (!rule || typeof rule.pattern !== 'string' || rule.pattern === '') {
+                continue;
+            }
+            let re: RegExp;
+            try {
+                re = new RegExp(rule.pattern, 'gm');
+            } catch {
+                const bad = new ParsedError();
+                bad.errorType = rule.name ?? 'custom-rule';
+                bad.severity = DiagnosticSeverity.Warning;
+                bad.message = `Invalid custom rule regex: ${rule.pattern}`;
+                bad.start = 1;
+                bad.end = 1;
+                bad.options = [];
+                results.push(bad);
+                continue;
+            }
+            let m: RegExpExecArray;
+            while ((m = re.exec(text)) !== null) {
+                if (m.index === re.lastIndex) {
+                    re.lastIndex++;
+                }
+                const groups = m.groups ?? {};
+                const result = new ParsedError();
+                result.errorType = rule.name ?? 'custom-rule';
+                result.severity = RULE_SEVERITIES[rule.severity] ?? DiagnosticSeverity.Warning;
+                result.message = (groups.message ?? m[0]).trim();
+                result.start = groups.line ? +groups.line : 1;
+                result.end = groups.endLine ? +groups.endLine : result.start;
+                result.options = groups.options
+                    ? groups.options.split(/\s+/).filter(s => s.length > 0)
+                    : [];
+                if (groups.file) {
+                    this.locateFile(result, groups.file, caseRoot);
+                }
+                results.push(result);
+            }
+        }
+        return results;
+    }
+
     // Map a parsed error to the severity configured for its type;
     // null means the diagnostic is suppressed
     private severityFor(error: ParsedError): DiagnosticSeverity | null {
@@ -260,7 +267,10 @@ export class Validator {
         switch (error.errorType) {
             case 'FOAM FATAL ERROR': configured = this.settings.fatalError; break;
             case 'FOAM FATAL IO ERROR': configured = this.settings.fatalIOError; break;
-            default: return DiagnosticSeverity.Warning;
+            case 'FOAM Warning':
+            case 'FOAM IOWarning': configured = this.settings.warning ?? ValidationSeverity.WARNING; break;
+            // rule-produced errors carry their rule's severity
+            default: return error.severity ?? DiagnosticSeverity.Warning;
         }
         switch (configured) {
             case ValidationSeverity.IGNORE: return null;
@@ -284,42 +294,55 @@ export class Validator {
         }
     }
 
-    // Spawn the solver, collect stderr, always kill the child
-    private runSolverAsync(solver: string, cwd: string): Promise<string> {
+    // Spawn a program, collect its stdout AND stderr, always kill the
+    // child. Utilities like checkMesh print their complaints to stdout;
+    // the FOAM banners go to stderr — the parser gets both.
+    private runSolverAsync(solver: string, cwd: string, args: string[] = []): Promise<string> {
         return new Promise((resolve) => {
             let child;
             try {
-                child = spawn(solver, [], { cwd, stdio: ['ignore', 'ignore', 'pipe'] });
+                child = spawn(solver, args, {
+                    cwd,
+                    // ESI OpenFOAM compares $PWD against cwd() and warns
+                    // on every run when they disagree — which they always
+                    // do for a server spawned from the editor's directory
+                    env: { ...process.env, PWD: cwd },
+                    stdio: ['ignore', 'pipe', 'pipe'],
+                });
             } catch {
                 resolve('');
                 return;
             }
-            let stderr = '';
+            let output = '';
             let done = false;
             const finish = () => {
                 if (!done) {
                     done = true;
                     clearTimeout(timer);
                     try { child.kill('SIGKILL'); } catch { /* already gone */ }
-                    resolve(stderr);
+                    resolve(output);
                 }
             };
             const timer = setTimeout(finish, SOLVER_TIMEOUT_MS);
-            child.stderr.on('data', (data) => {
-                stderr += data.toString();
-                if (stderr.length >= STDERR_CAP || /FOAM (?:exiting|aborting)/.test(stderr)) {
+            const collect = (data) => {
+                output += data.toString();
+                if (output.length >= OUTPUT_CAP || /FOAM (?:exiting|aborting)/.test(output)) {
                     finish();
                 }
-            });
+            };
+            child.stdout.on('data', collect);
+            child.stderr.on('data', collect);
             child.on('error', finish);
             child.on('close', finish);
         });
     }
 
     /*
-        Async diagnostics: run the case's solver, parse every error and
-        warning from stderr. Resolves to parallel arrays: uris[i] is the
-        file diagnostics[i] belongs to.
+        Async diagnostics: run the case's solver (plus any configured
+        utilities, against a scratch copy — setFields and friends mutate
+        the case), parse every error and warning from their output.
+        Resolves to parallel arrays: uris[i] is the file diagnostics[i]
+        belongs to.
     */
     public async validateWithSolver(document: TextDocument): Promise<[TextDocumentIdentifier[], Diagnostic[], ParsedError[]]> {
         this.document = document;
@@ -346,25 +369,69 @@ export class Validator {
         if (!solver) {
             return [[], [], []];
         }
-        const stderr = await this.solverRunner(solver, root);
+        const runs: { command: string, args: string[], cwd: string }[] =
+            [{ command: solver, args: [], cwd: root }];
+        let scratchDir: string = null;
+        const utilities = this.settings.utilities ?? [];
+        if (utilities.length > 0) {
+            scratchDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'foam-utils-'));
+            await copyCaseSkeleton(root, scratchDir);
+            for (const utility of utilities) {
+                const words = utility.split(/\s+/).filter(w => w.length > 0);
+                if (words.length > 0) {
+                    runs.push({ command: words[0], args: words.slice(1), cwd: scratchDir });
+                }
+            }
+        }
         const uris: TextDocumentIdentifier[] = [];
         const problems: Diagnostic[] = [];
-        const errors = this.parseFoamErrors(stderr);
-        for (const error of errors) {
-            const severity = this.severityFor(error);
-            if (severity === null) {
-                continue;
+        const allErrors: ParsedError[] = [];
+        try {
+            for (const run of runs) {
+                const isUtility = run.cwd === scratchDir;
+                const output = await this.solverRunner(run.command, run.cwd, run.args);
+                const rules = [
+                    ...(isUtility ? UTILITY_RULES : []),
+                    ...(this.settings.customRules ?? []),
+                ];
+                // A utility that cannot run at all (setFields without a
+                // setFieldsDict, checkMesh before blockMesh) prints a
+                // banner naming no case file: environmental noise about a
+                // program the user opted into, not a mistake in the
+                // document being edited, so it is dropped. Rule matches
+                // are kept — they are the findings the utility was run
+                // for, and land on the current document when they name no
+                // file of their own.
+                const banners = this.parseFoamErrors(output, run.cwd)
+                    .filter(e => !isUtility || e.uri !== undefined);
+                const errors = banners.concat(this.parseWithRules(output, rules, run.cwd));
+                for (const error of errors) {
+                    // utility errors name scratch-copy paths; point them
+                    // back at the user's own files
+                    if (error.uri && scratchDir && error.uri.startsWith('file://' + scratchDir)) {
+                        error.uri = 'file://' + path.join(root, path.relative(scratchDir, error.uri.replace('file://', '')));
+                    }
+                    allErrors.push(error);
+                    const severity = this.severityFor(error);
+                    if (severity === null) {
+                        continue;
+                    }
+                    problems.push(Diagnostic.create(
+                        Range.create(Math.max(error.start - 1, 0), 0, Math.max(error.end - 1, 0), 3),
+                        error.message,
+                        severity,
+                        error.errorType,
+                        run.command,
+                    ));
+                    uris.push({ uri: error.uri === undefined ? document.uri : error.uri });
+                }
             }
-            problems.push(Diagnostic.create(
-                Range.create(Math.max(error.start - 1, 0), 0, Math.max(error.end - 1, 0), 3),
-                error.message,
-                severity,
-                error.errorType,
-                `${of_fork}-${of_version}(${of_compile_option})`,
-            ));
-            uris.push({ uri: error.uri === undefined ? document.uri : error.uri });
+        } finally {
+            if (scratchDir) {
+                await fsp.rm(scratchDir, { recursive: true, force: true });
+            }
         }
-        return [uris, problems, errors];
+        return [uris, problems, allErrors];
     }
 
     // Look for a keyword and return its value using TreeSitter
@@ -409,12 +476,6 @@ export class Validator {
             }
         }
     }
-    // Supported types of OpenFOAM errors
-    private static foamProblems = {
-        "FoamFatalError": "Generic OpenFOAM errors",
-        "FoamFatalIOError": "Whatever the programmer deems as an IO problem",
-    };
-
     static createWarning(start: Position, end: Position, description: string, code?: ValidationCode, tags?: DiagnosticTag[]): Diagnostic {
         return Validator.createDiagnostic(DiagnosticSeverity.Warning, start, end, description, code, tags);
     }

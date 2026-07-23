@@ -1,0 +1,10 @@
+
+
+--> FOAM FATAL ERROR: 
+cannot find file "/CASE_ROOT/system/setFieldsDict"
+
+    From function virtual Foam::autoPtr<Foam::ISstream> Foam::fileOperations::uncollatedFileOperation::readStream(Foam::regIOobject&, const Foam::fileName&, const Foam::word&, bool) const
+    in file global/fileOperations/uncollatedFileOperation/uncollatedFileOperation.C at line 539.
+
+FOAM exiting
+

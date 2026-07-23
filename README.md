@@ -25,14 +25,26 @@ We're supporting the following features (`*` for partial or limited support):
     - [x] Boundary patch names inside `boundaryField`
     - [x] Preprocessor directives (`#`-triggered) and snippets with documentation
     - [x] Passive "Banana Trick": `Valid options` lists harvested from solver
-          errors are offered as high-priority value completions
+          errors are offered as high-priority value completions, scoped to
+          the dict entry the error names (`fvSchemes.ddtSchemes.default`)
+    - [x] Active "Banana Trick" also probes keywords that have no value yet:
+          a complete `keyword banana;` entry is synthesized in the scratch
+          copy — the user's buffer and case files are never touched
     - [x] Banana-trick options carry documentation extracted from OpenFOAM
           class headers (`data/runtimeSelection.json`, regenerable against
           your OpenFOAM version — see [CONTRIBUTING](CONTRIBUTING.md))
 - **Diagnostics** [layered]
     - [x] Instant syntax errors from the Tree-Sitter grammar (on every keystroke, no solver needed)
-    - [x] Solver-based semantic errors: `FATAL ERROR`s, `FATAL IO ERROR`s and warnings,
-          multiple errors per run, foundation (`.org`) and ESI (`.com`) error formats
+    - [x] Solver-based semantic errors: `FATAL ERROR`s, `FATAL IO ERROR`s, warnings and
+          `IOWarning` deprecation notices, multiple errors per run, foundation (`.org`)
+          and ESI (`.com`) formats — including their absolute vs case-relative paths
+    - [x] Errors land on the file *and* the dictionary entry OpenFOAM names
+          (`system/fvSchemes/ddtSchemes/default`), whichever separator the
+          installed version uses
+    - [x] Configurable severities (`fatalError`, `fatalIOError`, `warning`) and
+          user-supplied regex rules for custom solver output (`customRules`)
+    - [x] Opt-in utility runs (`utilities`, e.g. `checkMesh`, `setFields`) against
+          a scratch copy of the case; `***`-style mesh complaints become warnings
     - [x] Async and debounced; the solver child process is always killed
     - [x] Workspace-wide (errors land on the file they point at)
     - [x] LSP 3.17 pull diagnostics with push fallback for older clients
@@ -111,6 +123,33 @@ vim.lsp.config('foam_ls', {
                     -- "error" | "warning" | "ignore"
                     fatalError = 'error',
                     fatalIOError = 'error',
+                    warning = 'warning',
+                    -- extra utilities to diagnose with, run sequentially
+                    -- against a scratch copy of the case (your files are
+                    -- never touched); empty by default. A utility that
+                    -- cannot run at all (setFields with no setFieldsDict)
+                    -- is silent rather than noisy: only complaints naming
+                    -- a case file, and rule matches, become diagnostics
+                    utilities = { 'checkMesh' },
+                    -- regex rules for custom solver output; named groups
+                    -- message, file, line, endLine and options feed the
+                    -- diagnostic (and options feed value completion)
+                    customRules = {
+                        {
+                            name = 'my-solver',
+                            pattern = 'MYSOLVER ERROR: (?<message>.+)',
+                            -- "error" | "warning" | "info" | "hint"
+                            severity = 'error',
+                        },
+                    },
+                },
+                completion = {
+                    -- insert FoamExtend absolute macro paths ($:name
+                    -- instead of $name), off by default
+                    absoluteMacroPaths = false,
+                    -- probe the solver for valid values of unknown
+                    -- keywords (spawns solver processes), off by default
+                    bananaTrick = false,
                 },
             },
         },
@@ -120,6 +159,11 @@ vim.lsp.enable('foam_ls')
 ```
 
 Older Neovim with `nvim-lspconfig` works the same way through `lspconfig.foam_ls.setup{}`.
+
+Valid entries shipped in custom shared libraries need no extra configuration:
+add OpenFOAM's own `libs ("libmyModels.so");` to your case's
+`system/controlDict` and every diagnostics run and banana probe loads them
+automatically (scratch copies include `controlDict`).
 
 The server talks standard LSP over stdio, so any LSP client works: point it
 at the `foam-ls` executable and make sure the workspace root is the case
