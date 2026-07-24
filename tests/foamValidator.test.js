@@ -143,6 +143,30 @@ describe('current OpenFOAM path formats', () => {
         assert.strictEqual(errors[0].uri, 'file:///home/user/cavity/system/fvSchemes');
         assert.deepStrictEqual(errors[0].dictPath, ['ddtSchemes', 'default']);
     });
+
+    test('a bad macro relocates onto the real source line, not OpenFOAM\'s bogus one', async () => {
+        // OpenFOAM reports "at line 12" for the $.writeInterval in the fixture
+        // controlDict, but the macro is actually on line 22 (its line number is
+        // unreliable in files with #include). The error names the macro, so we
+        // find "$.writeInterval" in the real source instead.
+        const { TextDocument } = require('vscode-languageserver-textdocument');
+        const controlDict = path.join(CAVITY_CASE, 'system', 'controlDict');
+        const parser = new Parser();
+        parser.setLanguage(foamLanguage);
+        const validator = new Validator(parser,
+            { rootUri: 'file://' + CAVITY_CASE },
+            async () => fixture('esi2412-bad-macro.txt'));
+        const doc = TextDocument.create('file://' + controlDict, 'foam', 1,
+            fs.readFileSync(controlDict, 'utf-8'));
+        const [uris, diagnostics] = await validator.validateWithSolver(doc);
+
+        const macroLine = fs.readFileSync(controlDict, 'utf-8').split('\n')
+            .findIndex(l => l.includes('$.writeInterval'));   // 0-based
+        assert.strictEqual(diagnostics.length, 1);
+        assert.match(diagnostics[0].message, /writeInterval/);
+        assert.strictEqual(diagnostics[0].range.start.line, macroLine);
+        assert.strictEqual(uris[0].uri, 'file://' + controlDict);
+    });
 });
 
 describe('parseWithRules', () => {

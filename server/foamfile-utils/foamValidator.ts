@@ -59,6 +59,9 @@ export class ParsedError {
     // dict entry the error names ("fvSchemes.ddtSchemes.default" ->
     // ["ddtSchemes", "default"]), scoping any options list to it
     dictPath?: string[];
+    // for macro-expansion errors: the macro name OpenFOAM names (".writeInterval"),
+    // used to relocate the diagnostic since OpenFOAM's own line is unreliable here
+    unresolvedMacro?: string;
 }
 
 export class Validator {
@@ -160,7 +163,41 @@ export class Validator {
         if (optionsMatch) {
             result.options = optionsMatch[1].split(/\s+/).filter(s => s.length > 0);
         }
+
+        // For a bad macro reference, OpenFOAM's "at line N" is unreliable: in a
+        // file with #include it points somewhere unrelated and does not even
+        // track the offending token. But it names the macro exactly
+        // (".writeInterval" for a source "$.writeInterval"), so remember it and
+        // relocate against the real source later (refineMacroLocation).
+        const macroMatch = block.match(/(?:Illegal dictionary entry or environment variable name|[Cc]annot find (?:keyword|entry)|[Uu]ndefined)\s+([.:!]?[\w.]+)/);
+        if (macroMatch) {
+            result.unresolvedMacro = macroMatch[1];
+        }
         return result;
+    }
+
+    // OpenFOAM misreports the line of a bad macro reference. It names the
+    // macro, though, so find the "$<name>" token in the real source and point
+    // the diagnostic there; leave OpenFOAM's line if the token isn't found.
+    private refineMacroLocation(error: ParsedError): void {
+        if (!error.unresolvedMacro || !error.uri) {
+            return;
+        }
+        let content: string;
+        try {
+            content = readFileSync(error.uri.replace(/^file:\/\//, ''), 'utf-8');
+        } catch {
+            return;
+        }
+        const needle = '$' + error.unresolvedMacro;
+        const lines = content.split('\n');
+        for (let i = 0; i < lines.length; i++) {
+            if (lines[i].includes(needle)) {
+                error.start = i + 1;
+                error.end = i + 1;
+                return;
+            }
+        }
     }
 
     /*
@@ -411,6 +448,8 @@ export class Validator {
                     if (error.uri && scratchDir && error.uri.startsWith('file://' + scratchDir)) {
                         error.uri = 'file://' + path.join(root, path.relative(scratchDir, error.uri.replace('file://', '')));
                     }
+                    // relocate bad-macro errors onto the real source line
+                    this.refineMacroLocation(error);
                     allErrors.push(error);
                     const severity = this.severityFor(error);
                     if (severity === null) {

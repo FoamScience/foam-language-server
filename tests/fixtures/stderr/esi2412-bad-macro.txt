@@ -1,0 +1,14 @@
+
+
+--> FOAM FATAL IO ERROR: (openfoam-2412 patch=260127)
+Illegal dictionary entry or environment variable name .writeInterval
+Known dictionary entries: 6(solver application startFrom startTime stopAt endTime)
+
+
+file: system/controlDict at line 12.
+
+    From bool Foam::primitiveEntry::expandVariable(const Foam::string&, const Foam::dictionary&)
+    in file db/dictionary/primitiveEntry/primitiveEntry.C at line 162.
+
+FOAM exiting
+
