@@ -89,9 +89,13 @@ describe('active banana trick: probe mechanics', () => {
             writes.push(target);
             return originalWrite.call(fs.promises, target, ...rest);
         };
-        // resolved before the probe runs: the scratch dir is gone (cleaned
-        // up in the probe's `finally`) by the time we'd otherwise check it
-        const tmpRoot = fs.realpathSync(os.tmpdir());
+        // Compare against the raw os.tmpdir(): the probe builds its scratch dir
+        // with mkdtemp(os.tmpdir() + ...), so the captured write paths keep that
+        // exact prefix. realpath'ing the root would break on macOS, where
+        // os.tmpdir() is a /var symlink to /private/var while the write paths
+        // keep the /var form. We can't realpath the targets either — they're
+        // already deleted by the probe's cleanup by the time we assert.
+        const tmpRoot = os.tmpdir();
         let options;
         try {
             options = await trick.probe(FVSCHEMES_URI, ['ddtSchemes', 'default'], index);

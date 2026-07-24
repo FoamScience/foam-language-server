@@ -19,14 +19,9 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: 22
-      
-      - uses: actions/setup-python@v4
-        with:
-          python-version: 3.12
 
-      - run: |
-          python -m ensurepip --upgrade
-          python -m pip install --upgrade pip setuptools wheel
-
+      # node-gyp (bundled with npm 10 / Node 22) builds the native tree-sitter
+      # modules using the runners' preinstalled python3 + toolchain; it no
+      # longer needs distutils/setuptools, so no separate Python setup step.
       - run: npm install
       - run: npm test
