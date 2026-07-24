@@ -87,6 +87,12 @@ Not planned:
 
 ### Installation
 
+Requires **Node.js >= 18**. On older Node the server exits immediately with a
+version message (its dependencies use syntax older Node cannot parse). If your
+system Node is older — Ubuntu's apt `nodejs`, for instance — install a current
+one (e.g. `nvm install --lts`) and make sure your editor or Mason launches the
+server with it.
+
 If you want the (somewhat) stable code (from Releases):
 ```bash
 npm install foam-language-server

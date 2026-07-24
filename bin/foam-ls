@@ -1,2 +1,25 @@
 #!/usr/bin/env node
-require("../lib/foam-ls.js");
+// NOTE: keep this launcher ES5-only (no ?. / ?? / arrow / template literals).
+// Its whole job is to fail with a clear message on a Node too old to even
+// PARSE our dependencies — so it must parse on that same old Node. The real
+// server (../lib/foam-ls.js) and its deps use modern syntax and are required
+// only after the version check passes.
+'use strict';
+
+// Minimum supported Node. Below this the dependencies fail to parse (optional
+// chaining / nullish coalescing need >=14) and `node --test` — the project's
+// own test runner — needs >=18, so 18 is the floor we actually support.
+var MIN_MAJOR = 18;
+var current = process.versions.node;
+var major = parseInt(current.split('.')[0], 10);
+
+if (major < MIN_MAJOR) {
+    process.stderr.write(
+        'foam-language-server requires Node.js >= ' + MIN_MAJOR + ', but is running on ' + current + '.\n' +
+        'On older Node it exits with a cryptic SyntaxError from a dependency instead of starting.\n' +
+        'Install a newer Node (e.g. `nvm install --lts`) and point your editor at it.\n'
+    );
+    process.exit(1);
+}
+
+require('../lib/foam-ls.js');

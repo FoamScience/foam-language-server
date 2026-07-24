@@ -19,7 +19,7 @@
   "author": "Mohammed Elwardi Fadeli",
   "license": "GPL-3.0-or-later",
   "engines": {
-    "node": "*"
+    "node": ">=18"
   },
   "bin": {
     "foam-ls": "./bin/foam-ls"
