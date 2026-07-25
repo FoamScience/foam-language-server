@@ -20,8 +20,13 @@ jobs:
         with:
           node-version: 22
 
-      # node-gyp (bundled with npm 10 / Node 22) builds the native tree-sitter
-      # modules using the runners' preinstalled python3 + toolchain; it no
-      # longer needs distutils/setuptools, so no separate Python setup step.
+      # The native tree-sitter modules build via node-gyp 9.x, whose gyp still
+      # imports distutils. Python 3.12 removed distutils from the stdlib (and
+      # runners now default to 3.13/3.14), so pin to 3.11 — the newest Python
+      # that still ships distutils and that node-gyp 9 officially supports.
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
       - run: npm install
       - run: npm test
