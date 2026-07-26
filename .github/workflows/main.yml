@@ -11,8 +11,13 @@ jobs:
   build-and-test:
     runs-on: ${{ matrix.os }}
     strategy:
+      # report every OS independently instead of cancelling the matrix on the
+      # first failure, so a toolchain issue on one platform doesn't hide the others
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # windows-2022 ships Visual Studio 2022; windows-latest moved to VS 18
+        # (2026), which the node-gyp 9.x used by the native build can't detect.
+        os: [ubuntu-latest, macos-latest, windows-2022]
 
     steps:
       - uses: actions/checkout@v5
