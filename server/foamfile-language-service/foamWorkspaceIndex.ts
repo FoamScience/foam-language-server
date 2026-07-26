@@ -137,7 +137,9 @@ export class FoamWorkspaceIndex {
             return;
         }
         const filePath = uriToPath(uri);
-        const relPath = path.relative(this.rootPath, filePath);
+        // case-relative path is a display/key value and is compared as a
+        // POSIX string ("0/U"); normalize away Windows backslashes
+        const relPath = path.relative(this.rootPath, filePath).split(path.sep).join('/');
         if (relPath.startsWith('..')) {
             return; // outside the case
         }

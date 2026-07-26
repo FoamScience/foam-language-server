@@ -81,7 +81,9 @@ export class FoamBananaTrick {
             }
             return [];
         } finally {
-            await fsp.rm(scratchDir, { recursive: true, force: true });
+            // maxRetries rides out Windows EBUSY: the probed solver may still
+            // hold a handle to the scratch dir for a beat after exit
+            await fsp.rm(scratchDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
         }
     }
 

@@ -47,6 +47,15 @@ const RULE_SEVERITIES: { [name: string]: DiagnosticSeverity } = {
 // callers (the active banana trick, tests) can stub the process layer.
 export type SolverRunner = (solver: string, cwd: string, args?: string[]) => Promise<string>;
 
+// Build a file:// URI from a filesystem path, cross-platform: LSP URIs use
+// forward slashes always, and a Windows drive path (D:\a\x) needs the leading
+// slash of file:///D:/a/x. Matches the URI form editors send back.
+function toFileUri(p: string): string {
+    let s = p.replace(/\\/g, '/');
+    if (!s.startsWith('/')) { s = '/' + s; }
+    return 'file://' + s;
+}
+
 // A representation of an OpenFOAM error
 export class ParsedError {
     uri: DocumentUri;
@@ -218,7 +227,7 @@ export class Validator {
         let candidate = full;
         while (candidate) {
             if (this.isFile(candidate)) {
-                result.uri = "file://" + candidate;
+                result.uri = toFileUri(candidate);
                 if (segments.length > 0) {
                     result.dictPath = segments;
                 }
@@ -233,7 +242,7 @@ export class Validator {
         // splits real dotted basenames, which OpenFOAM case files don't
         // have in practice
         const parts = path.basename(full).split('.');
-        result.uri = "file://" + path.join(path.dirname(full), parts[0]);
+        result.uri = toFileUri(path.join(path.dirname(full), parts[0]));
         if (parts.length > 1) {
             result.dictPath = parts.slice(1);
         }
@@ -444,9 +453,12 @@ export class Validator {
                 const errors = banners.concat(this.parseWithRules(output, rules, run.cwd));
                 for (const error of errors) {
                     // utility errors name scratch-copy paths; point them
-                    // back at the user's own files
-                    if (error.uri && scratchDir && error.uri.startsWith('file://' + scratchDir)) {
-                        error.uri = 'file://' + path.join(root, path.relative(scratchDir, error.uri.replace('file://', '')));
+                    // back at the user's own files (both are forward-slash
+                    // file URIs, so the tail after the scratch prefix grafts
+                    // straight onto the real case root)
+                    const scratchUri = scratchDir ? toFileUri(scratchDir) : null;
+                    if (error.uri && scratchUri && error.uri.startsWith(scratchUri)) {
+                        error.uri = toFileUri(root) + error.uri.slice(scratchUri.length);
                     }
                     // relocate bad-macro errors onto the real source line
                     this.refineMacroLocation(error);
@@ -467,7 +479,9 @@ export class Validator {
             }
         } finally {
             if (scratchDir) {
-                await fsp.rm(scratchDir, { recursive: true, force: true });
+                // maxRetries rides out Windows EBUSY: a spawned utility may
+                // still hold a handle to the scratch dir for a beat after exit
+                await fsp.rm(scratchDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
             }
         }
         return [uris, problems, allErrors];

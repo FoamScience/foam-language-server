@@ -104,6 +104,13 @@ const CAVITY_CASE = path.join(__dirname, 'fixtures', 'cavity');
 function realFixture(name) {
     return fixture(name).split('/CASE_ROOT').join(CAVITY_CASE);
 }
+// mirror the validator's cross-platform file URI form (forward slashes, and
+// the leading slash of file:///D:/... on Windows)
+function fileUri(p) {
+    let s = p.replace(/\\/g, '/');
+    if (!s.startsWith('/')) { s = '/' + s; }
+    return 'file://' + s;
+}
 
 describe('current OpenFOAM path formats', () => {
     test('foundation: slash-separated dict path splits at the real file', () => {
@@ -114,7 +121,7 @@ describe('current OpenFOAM path formats', () => {
         // the marker's trailing space used to blank out the whole message
         assert.strictEqual(e.message, 'Unknown ddt scheme banana');
         assert.strictEqual(e.start, 19);
-        assert.strictEqual(e.uri, 'file://' + path.join(CAVITY_CASE, 'system/fvSchemes'));
+        assert.strictEqual(e.uri, fileUri(path.join(CAVITY_CASE, 'system/fvSchemes')));
         assert.deepStrictEqual(e.dictPath, ['ddtSchemes', 'default']);
         assert.ok(e.options.includes('CoEuler') && e.options.includes('steadyState'));
     });
@@ -125,7 +132,7 @@ describe('current OpenFOAM path formats', () => {
         const e = errors[0];
         // ESI says "ddt type" where foundation says "ddt scheme"
         assert.strictEqual(e.message, 'Unknown ddt type banana');
-        assert.strictEqual(e.uri, 'file://' + path.join(CAVITY_CASE, 'system/fvSchemes'));
+        assert.strictEqual(e.uri, fileUri(path.join(CAVITY_CASE, 'system/fvSchemes')));
         assert.deepStrictEqual(e.dictPath, ['ddtSchemes', 'default']);
     });
 
@@ -165,7 +172,7 @@ describe('current OpenFOAM path formats', () => {
         assert.strictEqual(diagnostics.length, 1);
         assert.match(diagnostics[0].message, /writeInterval/);
         assert.strictEqual(diagnostics[0].range.start.line, macroLine);
-        assert.strictEqual(uris[0].uri, 'file://' + controlDict);
+        assert.strictEqual(uris[0].uri, fileUri(controlDict));
     });
 });
 
@@ -253,7 +260,9 @@ describe('utility-based diagnostics', () => {
         assert.deepStrictEqual(diagnostics, []);
     });
 
-    test('spawned programs see PWD matching their cwd', async () => {
+    // Unix-only: the stand-in utility is a /bin/sh script and the behaviour
+    // under test ($PWD vs cwd()) is an ESI-OpenFOAM-on-Unix concern
+    test('spawned programs see PWD matching their cwd', { skip: process.platform === 'win32' }, async () => {
         // ESI OpenFOAM warns on every run when $PWD disagrees with cwd(),
         // which it always does for a server spawned from the editor's dir
         const os = require('os');
