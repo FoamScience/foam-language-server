@@ -161,9 +161,9 @@ describe('current OpenFOAM path formats', () => {
         const parser = new Parser();
         parser.setLanguage(foamLanguage);
         const validator = new Validator(parser,
-            { rootUri: 'file://' + CAVITY_CASE },
+            { rootUri: fileUri(CAVITY_CASE) },
             async () => fixture('esi2412-bad-macro.txt'));
-        const doc = TextDocument.create('file://' + controlDict, 'foam', 1,
+        const doc = TextDocument.create(fileUri(controlDict), 'foam', 1,
             fs.readFileSync(controlDict, 'utf-8'));
         const [uris, diagnostics] = await validator.validateWithSolver(doc);
 
@@ -221,10 +221,10 @@ describe('utility-based diagnostics', () => {
         const parser = new Parser();
         parser.setLanguage(foamLanguage);
         const validator = new Validator(parser, {
-            rootUri: 'file://' + caseDir,
+            rootUri: fileUri(caseDir),
             utilities: [process.execPath + ' ' + script],
         });
-        const doc = TextDocument.create('file://' + path.join(caseDir, 'system', 'controlDict'), 'foam', 1, '');
+        const doc = TextDocument.create(fileUri(path.join(caseDir, 'system', 'controlDict')), 'foam', 1, '');
         const [, diagnostics] = await validator.validateWithSolver(doc);
 
         const untouched = !fs.existsSync(path.join(caseDir, 'marker.txt'));
@@ -251,10 +251,10 @@ describe('utility-based diagnostics', () => {
         const parser = new Parser();
         parser.setLanguage(foamLanguage);
         const validator = new Validator(parser, {
-            rootUri: 'file://' + caseDir,
+            rootUri: fileUri(caseDir),
             utilities: [process.execPath + ' ' + script],
         });
-        const doc = TextDocument.create('file://' + path.join(caseDir, 'system', 'controlDict'), 'foam', 1, '');
+        const doc = TextDocument.create(fileUri(path.join(caseDir, 'system', 'controlDict')), 'foam', 1, '');
         const [, diagnostics] = await validator.validateWithSolver(doc);
         fs.rmSync(caseDir, { recursive: true, force: true });
         assert.deepStrictEqual(diagnostics, []);
@@ -281,8 +281,8 @@ describe('utility-based diagnostics', () => {
 
         const parser = new Parser();
         parser.setLanguage(foamLanguage);
-        const validator = new Validator(parser, { rootUri: 'file://' + caseDir, utilities: [script] });
-        const doc = TextDocument.create('file://' + path.join(caseDir, 'system', 'controlDict'), 'foam', 1, '');
+        const validator = new Validator(parser, { rootUri: fileUri(caseDir), utilities: [script] });
+        const doc = TextDocument.create(fileUri(path.join(caseDir, 'system', 'controlDict')), 'foam', 1, '');
         const [, diagnostics] = await validator.validateWithSolver(doc);
         fs.rmSync(caseDir, { recursive: true, force: true });
         assert.strictEqual(diagnostics.length, 1);
@@ -296,9 +296,9 @@ describe('utility-based diagnostics', () => {
         const parser = new Parser();
         parser.setLanguage(foamLanguage);
         const validator = new Validator(parser,
-            { rootUri: 'file://' + CAVITY, warning: ValidationSeverity.IGNORE },
+            { rootUri: fileUri(CAVITY), warning: ValidationSeverity.IGNORE },
             async () => fixture('esi-warning.txt'));
-        const doc = TextDocument.create('file://' + path.join(CAVITY, 'system', 'controlDict'), 'foam', 1, '');
+        const doc = TextDocument.create(fileUri(path.join(CAVITY, 'system', 'controlDict')), 'foam', 1, '');
         const [, diagnostics] = await validator.validateWithSolver(doc);
         assert.deepStrictEqual(diagnostics, []);
     });

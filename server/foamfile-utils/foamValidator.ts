@@ -20,6 +20,7 @@ import * as TreeParser from 'tree-sitter';
 import { spawn } from 'child_process';
 import { readFileSync, existsSync, statSync, promises as fsp } from 'fs';
 import * as os from 'os';
+import { fileURLToPath } from 'url';
 var path = require('path');
 
 // Async solver runs are hard-killed on whichever comes first:
@@ -54,6 +55,17 @@ function toFileUri(p: string): string {
     let s = p.replace(/\\/g, '/');
     if (!s.startsWith('/')) { s = '/' + s; }
     return 'file://' + s;
+}
+
+// null for non-file URIs and ones that aren't a valid path on this platform
+// (e.g. a drive-less file:///x on Windows)
+function fromFileUri(uri: string | null | undefined): string | null {
+    if (!uri?.startsWith('file://')) { return null; }
+    try {
+        return fileURLToPath(uri);
+    } catch {
+        return null;
+    }
 }
 
 // A representation of an OpenFOAM error
@@ -194,7 +206,7 @@ export class Validator {
         }
         let content: string;
         try {
-            content = readFileSync(error.uri.replace(/^file:\/\//, ''), 'utf-8');
+            content = readFileSync(fileURLToPath(error.uri), 'utf-8');
         } catch {
             return;
         }
@@ -392,8 +404,8 @@ export class Validator {
     */
     public async validateWithSolver(document: TextDocument): Promise<[TextDocumentIdentifier[], Diagnostic[], ParsedError[]]> {
         this.document = document;
-        const docPath = document.uri.startsWith("file://") ? document.uri.replace("file://", '') : null;
-        let root = this.settings.rootUri ? this.settings.rootUri.replace("file://", '') : null;
+        const docPath = fromFileUri(document.uri);
+        let root = fromFileUri(this.settings.rootUri);
         if (!root || !existsSync(path.join(root, 'system', 'controlDict'))) {
             root = docPath ? this.findCaseRoot(path.dirname(docPath)) : null;
         }
